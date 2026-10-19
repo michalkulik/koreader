@@ -374,6 +374,30 @@ if Device:isAndroid() then
         end,
     }
 
+    -- Use the brightness managed by Android, so that automatic brightness is honored.
+    if android.hasSystemBrightness and android.hasSystemBrightness() then
+        common_settings.android_system_brightness = {
+            text = _("Use system brightness"),
+            help_text = _("Follow the screen brightness set by Android, including automatic brightness.\n\nChanging the brightness from KOReader (gestures, frontlight dialog) switches back to a fixed brightness."),
+            checked_func = function()
+                return android.isScreenBrightnessSystem()
+            end,
+            callback = function()
+                if android.isScreenBrightnessSystem() then
+                    -- Switch to a fixed brightness, starting from the current system level
+                    PowerD.fl_intensity = PowerD:frontlightIntensityHW()
+                    PowerD:setIntensityHW(PowerD.fl_intensity)
+                    UIManager:broadcastEvent(Event:new("FrontlightStateChanged"))
+                else
+                    android.setScreenBrightness(-1)
+                    PowerD.fl_intensity = PowerD:frontlightIntensityHW()
+                    PowerD:_decideFrontlightState()
+                    UIManager:broadcastEvent(Event:new("FrontlightStateChanged"))
+                end
+            end,
+        }
+    end
+
     -- ignore battery optimization
     if Device.firmware_rev >= 23 then
         common_settings.ignore_battery_optimizations = {

@@ -152,6 +152,7 @@ local order = {
         "screen_eink_opt",
         "autowarmth",
         "color_rendering",
+        "android_system_brightness",
         "----------------------------",
         "screen_timeout",
         "fullscreen",

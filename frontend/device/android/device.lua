@@ -528,7 +528,9 @@ end
 
 function Device:_showLightDialog()
     local title = android.isEink() and _("Frontlight settings") or _("Light settings")
-    android.lights.showDialog(title, _("Brightness"), _("Warmth"), _("OK"), _("Cancel"))
+    -- Was the window following the system brightness when the dialog was opened?
+    local was_system_brightness = android.isScreenBrightnessSystem and android.isScreenBrightnessSystem()
+    android.lights.showDialog(title, _("Brightness"), _("Warmth"), _("Use system brightness"), _("OK"), _("Cancel"))
 
     local action = android.lights.dialogState()
     while action == C.ALIGHTS_DIALOG_OPENED do
@@ -546,7 +548,14 @@ function Device:_showLightDialog()
         UIManager:broadcastEvent(Event:new("FrontlightStateChanged"))
     elseif action == C.ALIGHTS_DIALOG_CANCEL then
         logger.dbg("Dialog Cancel, brightness: " .. self.powerd.fl_intensity)
-        self.powerd:setIntensityHW(self.powerd.fl_intensity)
+        if was_system_brightness then
+            -- Restore the system brightness mode (the dialog may have switched it off)
+            android.setScreenBrightness(-1)
+            self.powerd.fl_intensity = self.powerd:frontlightIntensityHW()
+            self.powerd:_decideFrontlightState()
+        else
+            self.powerd:setIntensityHW(self.powerd.fl_intensity)
+        end
         if android.isWarmthDevice() then
             logger.dbg("Dialog Cancel, warmth: " .. self.powerd.fl_warmth)
             self.powerd:setWarmth(self.powerd.fl_warmth)
