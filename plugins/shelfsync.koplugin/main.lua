@@ -378,6 +378,17 @@ function ShelfSync:filterBooks(books)
     return filtered
 end
 
+function ShelfSync:showHostMenu()
+    -- Tapping the shelf's title/subtitle area opens the regular KOReader top
+    -- menu (File manager or Reader), instead of forcing the user to leave the
+    -- full-screen shelf first.  The shelf stays behind the menu and is still
+    -- there when the top menu is closed.
+    local ui = self.ui
+    if ui and ui.menu and ui.menu.onShowMenu then
+        ui.menu:onShowMenu()
+    end
+end
+
 function ShelfSync:showShelfSearch(books)
     local dialog
     dialog = InputDialog:new{
@@ -1187,6 +1198,13 @@ function ShelfSync:showShelfActions(shelf_menu, books)
             end,
         })
     end
+    table.insert(items, {
+        text = _("Close shelf"),
+        callback = function()
+            close_actions()
+            self:closeShelf()
+        end,
+    })
     local continue = self:continueBook(books)
     if continue then
         table.insert(items, {
@@ -1283,6 +1301,7 @@ function ShelfSync:showShelf()
             title_bar_fm_style = true,
             title_bar_left_icon = "appbar.menu",
             on_left_button_tap = function() self:showShelfActions(menu, all_books) end,
+            on_title_tap = function() self:showHostMenu() end,
         }
     else
         local items = {}
@@ -1305,6 +1324,7 @@ function ShelfSync:showShelf()
             title_bar_fm_style = true,
             title_bar_left_icon = "appbar.menu",
             on_left_button_tap = function() self:showShelfActions(menu, all_books) end,
+            on_title_tap = function() self:showHostMenu() end,
             on_book_tap = function(entry) self:openBook(entry.book) end,
             on_book_hold = function(entry) self:showBookActions(entry.book) end,
         }

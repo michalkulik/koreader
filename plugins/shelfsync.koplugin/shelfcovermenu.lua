@@ -174,6 +174,17 @@ local function find_cover_tile(widget, pos)
     return nil
 end
 
+local function add_title_tap(menu)
+    menu.ges_events.TitleTap = {
+        GestureRange:new{
+            ges = "tap",
+            range = function()
+                return menu.title_bar and menu.title_bar.dimen
+            end,
+        },
+    }
+end
+
 function CoverMenu:init()
     Menu.init(self)
     -- A fallback for taps that arrive on the menu itself instead of a tile.
@@ -190,12 +201,20 @@ function CoverMenu:init()
             },
         },
     }
+    add_title_tap(self)
 end
 
 function CoverMenu:onCoverTileTapFallback(arg, ges)
     local tile = find_cover_tile(self.item_group, ges.pos)
     if tile and tile.onTapSelect then
         return tile:onTapSelect()
+    end
+end
+
+function CoverMenu:onTitleTap()
+    if self.on_title_tap then
+        self.on_title_tap()
+        return true
     end
 end
 
@@ -342,6 +361,18 @@ local ShelfListMenu = Menu:extend{
     covers_fullscreen = true,
     title_bar_fm_style = true,
 }
+
+function ShelfListMenu:init()
+    Menu.init(self)
+    add_title_tap(self)
+end
+
+function ShelfListMenu:onTitleTap()
+    if self.on_title_tap then
+        self.on_title_tap()
+        return true
+    end
+end
 
 function ShelfListMenu:onLeftButtonTap()
     if self.on_left_button_tap then
