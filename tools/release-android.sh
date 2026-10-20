@@ -2,8 +2,8 @@
 # Publish a signed Android APK together with KOReader's in-app OTA assets.
 #
 # Usage:
-#   tools/release-android.sh --apk koreader-android-arm64-v2026.15.apk \
-#       --version v2026.15 --notes-file /tmp/opencode/release-notes-v2026.15.md
+#   tools/release-android.sh --apk koreader-android-arm64-v2026.16.apk \
+#       --version v2026.16 --notes-file /tmp/opencode/release-notes-v2026.16.md
 #
 # The script creates the GitHub release when it does not exist, then uploads
 # (with --clobber):

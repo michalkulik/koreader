@@ -352,7 +352,7 @@ Błąd sieci nie czyści kolejki. Operacje są idempotentne (dedupe po `partial_
 
 ## 9. Aktualizacje aplikacji — źródło: fork na GitHubie
 
-**Stan:** zaimplementowane w `v2026.14`, poprawka w `v2026.15`. `frontend/ui/otamanager.lua` nie ma już
+**Stan:** zaimplementowane w `v2026.14`, poprawki w `v2026.15` i `v2026.16`. `frontend/ui/otamanager.lua` nie ma już
 serwerów upstream — `ota_servers[1]` wskazuje na wydania forka:
 
 ```lua
@@ -379,21 +379,21 @@ Do każdego wydania Android dołączane są trzy assety:
 
 ```json
 {
-  "version": "v2026.15",
-  "versionCode": 202615000000,
-  "url": "https://github.com/michalkulik/koreader/releases/download/v2026.15/koreader-android-arm64-v2026.15.apk",
+  "version": "v2026.16",
+  "versionCode": 202616000000,
+  "url": "https://github.com/michalkulik/koreader/releases/download/v2026.16/koreader-android-arm64-v2026.16.apk",
   "sha256": "…",
   "size": 30154383,
   "abi": "arm64-v8a",
-  "filename": "koreader-android-arm64-v2026.15.apk"
+  "filename": "koreader-android-arm64-v2026.16.apk"
 }
 ```
 
 Assety generuje `tools/make-ota-assets.py`:
 
 ```sh
-tools/make-ota-assets.py --apk koreader-android-arm64-v2026.15.apk \
-    --version v2026.15 --out /tmp/opencode/ota-assets
+tools/make-ota-assets.py --apk koreader-android-arm64-v2026.16.apk \
+    --version v2026.16 --out /tmp/opencode/ota-assets
 ```
 
 i dołącza `tools/release-android.sh` (albo ręcznie `gh release upload --clobber`).
@@ -559,14 +559,20 @@ a `menu_items.shelfsync` istnieje w menedżerze plików.
 przykładowej bibliotece (log `DIAG shelf …`). Logika przekierowań OTA
 przetestowana lokalnym serwerem 302 (przekierowanie względne, bezwzględne i 404).
 `OTAManager:checkUpdate()` na żywym GitHubie zwrócił
-`version=202615000000`, `link=…/releases/latest/download/koreader-android-arm64-v2026.15.apk`.
+`version=202616000000`, `link=…/releases/latest/download/koreader-android-arm64-v2026.16.apk`.
 
-**Wydanie:** [`v2026.15`](https://github.com/michalkulik/koreader/releases/tag/v2026.15)
+**Wydanie:** [`v2026.16`](https://github.com/michalkulik/koreader/releases/tag/v2026.16)
 — APK arm64 `30 260 879` B, SHA-256
-`10792eed55adef451886f716afed089869d93b8f4957e83e5f44d27b3e29630b`,
+`b93c18d97a60b26e4f31eb97499ed35190a22ba0778a9385a5bc912e69bdc7c1`,
 podpisany tym samym kluczem. Do wydania dołączone są manifest OTA i `latest.json`.
 `v2026.14` było pierwszym wydaniem z OTA, `v2026.15` poprawia wyświetlanie czasu
-postępu (serwer zwraca milisekundy).
+postępu (serwer zwraca milisekundy), a `v2026.16` naprawia uszkadzający się cache
+półki: dekoder JSON reprezentuje `null` funkcją, a `LuaSettings` zapisywał ją do
+pliku jako `function: 0x…`, przez co plik ustawień przestawał być poprawnym Lua
+i po restarcie wtyczka traciła token. `sanitize_for_storage()` usuwa `null`,
+funkcje i inne niebezpieczne wartości przed zapisem. Sprawdzone na żywym
+serwerze: cache zawiera tylko dane, token zostaje, a po restarcie wtyczka jest
+zalogowana i widzi książki offline.
 
 **Ograniczenia etapu 3:**
 - brak okładek na liście — serwerowy `GET /api/v1/books/{id}/cover` nadal
@@ -577,7 +583,7 @@ postępu (serwer zwraca milisekundy).
 - brak synchronizacji ustawień i kolekcji (etapy 4–5),
 - wtyczka nie była jeszcze testowana na fizycznym Kindle 10.
 
-**Następny krok:** zainstalować `v2026.15` na Androidzie i Kindle 10,
+**Następny krok:** zainstalować `v2026.16` na Androidzie i Kindle 10,
 sprawdzić wbudowane **Update** (powinno pobrać wydanie z forka), potem etap 4
 (synchronizacja ustawień) albo okładki półki.
 
