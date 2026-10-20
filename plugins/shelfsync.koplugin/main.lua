@@ -71,6 +71,12 @@ function ShelfSync:init()
     }
     logger.info("ShelfSync: initialized", self.server_url,
         self:isLoggedIn() and "logged in" or "not logged in")
+
+    -- Bez tego menu wtyczki nie jest w ogóle budowane: KOReader woła
+    -- addToMainMenu() tylko dla widgetów zarejestrowanych w menu.
+    if self.ui and self.ui.menu then
+        self.ui.menu:registerToMainMenu(self)
+    end
 end
 
 function ShelfSync:saveSettings()
