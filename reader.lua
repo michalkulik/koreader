@@ -297,6 +297,12 @@ else
             FileManager.instance.collections:onShowColl()
         elseif start_with == "folder_shortcuts" then
             FileManager.instance.folder_shortcuts:onShowFolderShortcutsDialog()
+        elseif start_with == "shelf" then
+            local PluginLoader = require("pluginloader")
+            local plugin = PluginLoader:getPluginInstance("shelfsync")
+            if plugin then
+                plugin:showShelf()
+            end
         end
         exit_code = UIManager:run()
     end

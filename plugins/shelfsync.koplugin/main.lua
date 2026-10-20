@@ -36,6 +36,7 @@ local _ = require("gettext")
 local T = require("ffi/util").template
 
 local Client = require("client")
+local CoverMenu = require("covermenu")
 local Index = require("index")
 local Queue = require("queue")
 
@@ -98,6 +99,7 @@ function ShelfSync:init()
 
     self.queue = Queue:new(settings_dir .. "/shelfsync_queue.lua")
     self.index = Index:new(settings_dir .. "/shelfsync_index.lua")
+    self.cover_failures = {}
     self.client = Client:new{
         base_url = self.server_url,
         token = self.token,
@@ -756,9 +758,124 @@ end
 
 -- --------------------------------------------------------------------- shelf
 
+function ShelfSync:coverDir()
+    if self._cover_dir then return self._cover_dir end
+    local dir = DataStorage:getDataDir() .. "/shelf/covers"
+    util.makePath(dir)
+    self._cover_dir = dir
+    return dir
+end
+
+function ShelfSync:coverPath(book)
+    if not book or not book.id then return end
+    return self:coverDir() .. "/" .. book.id .. ".jpg"
+end
+
+function ShelfSync:coverTitle(book)
+    return book.title or book.filename or book.id or _("Unknown book")
+end
+
+function ShelfSync:coverSubtitle(book)
+    local bits = {}
+    if book.authors and book.authors ~= "" then
+        table.insert(bits, book.authors)
+    end
+    local progress = book.progress
+    if progress and tonumber(progress.percentage) then
+        table.insert(bits, T(_("%1%"), math.floor(tonumber(progress.percentage) * 100)))
+    end
+    if #bits == 0 then
+        table.insert(bits, self.index:find_by_book_id(book.id) and _("on device") or _("on server"))
+    end
+    return table.concat(bits, " · ")
+end
+
+function ShelfSync:downloadMissingCovers(menu, books)
+    if not NetworkMgr:isOnline() then return end
+    local now = os.time()
+    local missing = {}
+    for _, book in ipairs(books or {}) do
+        local path = self:coverPath(book)
+        local failed_at = self.cover_failures[book.id]
+        if path and lfs.attributes(path, "mode") ~= "file"
+            and (not failed_at or now - failed_at > 3600) then
+            table.insert(missing, book)
+        end
+    end
+    if #missing == 0 then return end
+
+    UIManager:scheduleIn(1, function()
+        local downloaded = 0
+        for _, book in ipairs(missing) do
+            if not UIManager:isWidgetShown(menu) then break end
+            local path = self:coverPath(book)
+            local temp = path .. ".part"
+            local ok = self.client:download_cover(book.id, temp)
+            if ok then
+                os.remove(path)
+                local renamed = os.rename(temp, path)
+                if renamed then
+                    downloaded = downloaded + 1
+                    self.cover_failures[book.id] = nil
+                else
+                    os.remove(temp)
+                end
+            else
+                os.remove(temp)
+                self.cover_failures[book.id] = os.time()
+            end
+        end
+        if downloaded > 0 and UIManager:isWidgetShown(menu) then
+            menu:refreshCovers()
+        end
+    end)
+end
+
+function ShelfSync:showShelfActions(menu, books)
+    local online = NetworkMgr:isOnline()
+    local pending = self:pendingCount()
+    local items = {
+        {
+            text = _("Synchronize now"),
+            mandatory = T(_("%1 · %2 pending"),
+                online and self:shelfStatusText() or _("offline"), pending),
+            callback = function() self:syncNow() end,
+        },
+        {
+            text = _("Refresh shelf"),
+            callback = function()
+                if menu then UIManager:close(menu) end
+                self:showShelf()
+            end,
+        },
+    }
+    if pending > 0 then
+        table.insert(items, {
+            text = T(_("Pending changes: %1"), pending),
+            mandatory = self.last_error and T(_("%1 errors"), self.last_error) or nil,
+            callback = function() self:showQueue() end,
+        })
+    end
+    local continue = self:continueBook(books)
+    if continue then
+        table.insert(items, {
+            text = T(_("Continue reading: %1"), self:coverTitle(continue)),
+            mandatory = T(_("%1%"),
+                math.floor((continue.progress.percentage or 0) * 100)),
+            callback = function() self:openBook(continue) end,
+        })
+    end
+    UIManager:show(Menu:new{
+        title = T(_("Shelf · %1"), online and self:shelfStatusText() or _("offline")),
+        item_table = items,
+        width = Device.screen:getWidth() * 0.9,
+        title_bar_fm_style = true,
+    })
+end
+
 function ShelfSync:showShelf()
     if not self:isLoggedIn() then
-        self:showLoginDialog()
+        self:showLoginDialog(function() self:showShelf() end)
         return
     end
 
@@ -776,53 +893,30 @@ function ShelfSync:showShelf()
     end
 
     local pending = self:pendingCount()
-    local items = {
-        {
-            text = _("⟳ Synchronize now"),
-            mandatory = T(_("%1 · %2 pending"),
-                online and self:shelfStatusText() or _("offline"), pending),
-            callback = function() self:syncNow() end,
-            hold_keep_menu_open = false,
-        },
-    }
-
-    if pending > 0 then
-        table.insert(items, {
-            text = T(_("Pending changes: %1"), pending),
-            mandatory = self.last_error and T(_("%1 errors"), self.last_error) or nil,
-            callback = function() self:showQueue() end,
-        })
-    end
-
-    local continue = self:continueBook(books)
-    if continue then
-        table.insert(items, {
-            text = T(_("Continue reading: %1"),
-                continue.title or continue.filename or continue.id),
-            mandatory = T(_("%1%"),
-                math.floor((continue.progress.percentage or 0) * 100)),
-            callback = function() self:openBook(continue) end,
-            hold_keep_menu_open = false,
-        })
-    end
-
+    local items = {}
     for _, book in ipairs(books) do
-        local local_path = self.index:find_by_book_id(book.id)
         table.insert(items, {
-            text = self:bookTitle(book),
-            mandatory = self:bookSubtitle(book, local_path),
-            callback = function() self:openBook(book) end,
-            hold_callback = function() self:showBookActions(book) end,
-            hold_keep_menu_open = false,
+            book = book,
+            title = self:coverTitle(book),
+            subtitle = self:coverSubtitle(book),
+            cover_path = self:coverPath(book),
         })
     end
 
-    UIManager:show(Menu:new{
+    local menu
+    menu = CoverMenu:new{
         title = T(_("Shelf · %1"), online and self:shelfStatusText() or _("offline")),
+        subtitle = T(_("%1 books · %2 pending"), #books, pending),
         item_table = items,
-        width = Device.screen:getWidth() * 0.9,
+        width = Device.screen:getWidth() * 0.96,
         title_bar_fm_style = true,
-    })
+        title_bar_left_icon = "appbar.menu",
+        on_left_button_tap = function() self:showShelfActions(menu, books) end,
+        on_book_tap = function(entry) self:openBook(entry.book) end,
+        on_book_hold = function(entry) self:showBookActions(entry.book) end,
+    }
+    UIManager:show(menu)
+    self:downloadMissingCovers(menu, books)
 end
 
 function ShelfSync:showBookActions(book)
@@ -1071,7 +1165,7 @@ function ShelfSync:showDownloadDirDialog()
     UIManager:show(dialog)
 end
 
-function ShelfSync:showLoginDialog()
+function ShelfSync:showLoginDialog(on_success)
     local dialog
     local fields = {
         {
@@ -1099,7 +1193,7 @@ function ShelfSync:showLoginDialog()
                     callback = function()
                         local values = dialog:getFields()
                         UIManager:close(dialog)
-                        self:doLogin(values[1], values[2])
+                        self:doLogin(values[1], values[2], on_success)
                     end,
                 },
             },
@@ -1108,7 +1202,7 @@ function ShelfSync:showLoginDialog()
     UIManager:show(dialog)
 end
 
-function ShelfSync:doLogin(username, password)
+function ShelfSync:doLogin(username, password, on_success)
     if not username or username == "" or not password or password == "" then
         self:showInfo(_("Username and password are required."))
         return
@@ -1126,7 +1220,11 @@ function ShelfSync:doLogin(username, password)
     self.client = Client:new{ base_url = self.server_url, token = self.token }
     self:saveSettings()
     self:showInfo(T(_("Logged in as %1."), username))
-    self:refreshLibrary()
+    if on_success then
+        on_success()
+    else
+        self:refreshLibrary()
+    end
 end
 
 function ShelfSync:doLogout()
@@ -1182,6 +1280,16 @@ function ShelfSync:getSettingsMenuTable()
             callback = function()
                 self.auto_progress = not self.auto_progress
                 self:saveSettings()
+            end,
+        },
+        {
+            text = _("Open shelf at startup"),
+            checked_func = function()
+                return G_reader_settings:readSetting("start_with", "filemanager") == "shelf"
+            end,
+            callback = function()
+                local is_shelf = G_reader_settings:readSetting("start_with", "filemanager") == "shelf"
+                G_reader_settings:saveSetting("start_with", is_shelf and "filemanager" or "shelf")
             end,
         },
         {

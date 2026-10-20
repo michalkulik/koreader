@@ -976,6 +976,7 @@ function FileManagerMenu:getStartWithMenuTable()
         { _("history"), "history" },
         { _("favorites"), "favorites" },
         { _("folder shortcuts"), "folder_shortcuts" },
+        { _("shelf"), "shelf" },
         { _("most recent document"), "last" },
     }
     local sub_item_table = {}

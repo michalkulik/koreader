@@ -195,6 +195,42 @@ function Client:upload_file(book_id, path, size, progress_cb)
     return nil, code, data
 end
 
+--- Download a cover image. Returns true, code, content_type.
+function Client:download_cover(book_id, path)
+    local file = io.open(path, "wb")
+    if not file then
+        return nil, nil, "cannot create file"
+    end
+    socketutil:set_timeout(JSON_TIMEOUT, JSON_TIMEOUT * 2)
+    local ok, code, response_headers, status = pcall(function()
+        return socket.skip(1, http.request{
+            url = self:url("/api/v1/books/" .. book_id .. "/cover"),
+            method = "GET",
+            headers = self:headers({ ["Accept"] = "image/*" }),
+            sink = ltn12.sink.file(file),
+        })
+    end)
+    socketutil:reset_timeout()
+    pcall(function() file:close() end)
+    if ok and type(code) == "number" and code >= 200 and code < 300 then
+        local content_type
+        if type(response_headers) == "table" then
+            for key, value in pairs(response_headers) do
+                if key:lower() == "content-type" then
+                    content_type = value
+                    break
+                end
+            end
+        end
+        return true, code, content_type
+    end
+    os.remove(path)
+    if not ok then
+        return nil, nil, tostring(code)
+    end
+    return nil, code, status
+end
+
 --- Download a book file. Returns true, code, error.
 function Client:download_file(book_id, path, size, progress_cb)
     local file = io.open(path, "wb")
