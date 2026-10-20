@@ -787,11 +787,12 @@ function ShelfSync:bookProgressLabel(book)
 end
 
 function ShelfSync:coverSubtitle(book)
-    local bits = {}
+    -- Keep the percentage first so it stays visible even when a long author
+    -- name is truncated at the tile width.
+    local bits = { self:bookProgressLabel(book) }
     if book.authors and book.authors ~= "" then
         table.insert(bits, book.authors)
     end
-    table.insert(bits, self:bookProgressLabel(book))
     return table.concat(bits, " · ")
 end
 
