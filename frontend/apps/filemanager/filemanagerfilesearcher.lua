@@ -503,7 +503,6 @@ function FileSearcher:onMenuHold(item)
             local annotations = doc_settings_or_file:readSetting("annotations")
             if annotations and #annotations > 0 then
                 table.insert(buttons, {
-                    self._manager.ui.collections:genExportHighlightsButton({ [file] = true }, close_dialog_callback),
                     self._manager.ui.collections:genBookmarkBrowserButton({ [file] = true }, close_dialog_callback),
                 })
             end

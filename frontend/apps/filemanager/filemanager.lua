@@ -288,7 +288,6 @@ function FileManager:setupLayout()
                 local annotations = doc_settings_or_file:readSetting("annotations")
                 if annotations and #annotations > 0 then
                     table.insert(buttons, {
-                        file_manager.collections:genExportHighlightsButton({ [file] = true }, close_dialog_callback),
                         file_manager.collections:genBookmarkBrowserButton({ [file] = true }, close_dialog_callback),
                     })
                 end
@@ -593,7 +592,6 @@ function FileManager:getPlusDialogButtons()
                     close_dialog_callback, toggle_select_mode_callback, not actions_enabled),
             },
             {
-                self.collections:genExportHighlightsButton(self.selected_files, close_dialog_callback, not actions_enabled),
                 self.collections:genBookmarkBrowserButton(self.selected_files, close_dialog_callback, not actions_enabled),
             },
             {}, -- separator
