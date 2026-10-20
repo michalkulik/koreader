@@ -10,6 +10,8 @@ local order = {
         "plus_menu",
         "main",
     },
+    -- Top-menu action button, kept by MenuSorter like a normal tab.
+    shelf_button = {},
     filemanager_settings = {
         "filemanager_display_mode",
         "filebrowser_settings",

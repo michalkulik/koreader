@@ -10,6 +10,9 @@ local order = {
         "shelf_button",
         "main",
     },
+    -- A top-menu action button (not a submenu tab). MenuSorter expects an
+    -- order entry for every button; without it the icon is dropped.
+    shelf_button = {},
     navi = {
         "table_of_contents",
         "bookmarks",

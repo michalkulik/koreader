@@ -234,10 +234,6 @@ function CoverMenu:_recalculateDimen()
     self.available_height = inner_h - top_height - bottom_height
 
     self.item_margin = Screen:scaleBySize(6)
-    -- The cover text block needs more breathing room vertically than
-    -- horizontally; otherwise the next row's cover can touch the progress
-    -- label of the row above on small screens.
-    self.row_margin = Screen:scaleBySize(14)
     self.nb_cols = inner_w >= Screen:scaleBySize(800) and 4 or 3
     self.item_width = math.floor(
         (inner_w - (self.nb_cols + 1) * self.item_margin) / self.nb_cols
@@ -247,17 +243,49 @@ function CoverMenu:_recalculateDimen()
     self.cover_w = self.item_width
     self.cover_h = math.floor(self.item_width * 1.35)
     self.progress_h = Screen:scaleBySize(8)
-    self.text_height = Screen:scaleBySize(60)
-    self.item_height = self.cover_h + self.progress_h
-        + self.text_height + Screen:scaleBySize(8)
 
-    self.nb_rows = math.max(
-        1,
-        math.floor(
-            (self.available_height - self.row_margin)
-                / (self.item_height + self.row_margin)
-        )
+    -- Measure a real tile instead of guessing the height of the text block.
+    -- Font metrics differ between Android phones and e-ink devices; a fixed
+    -- 60px text area can be too short, letting a cover paint over the progress
+    -- line of the previous row.  The probe includes cover, progress bar and
+    -- all three text widgets (title, author, percentage).
+    local probe = CoverTile:new{
+        title = "Ag",
+        author = "Ag",
+        progress_text = "100%",
+        progress = 0,
+        width = self.item_width,
+        height = 0,
+        cover_w = self.cover_w,
+        cover_h = self.cover_h,
+        progress_h = self.progress_h,
+    }
+    local content_height = probe[1]:getSize().h
+    probe:free()
+    -- Leave a little empty space below the percentage as well, so the next
+    -- row starts clearly below it, not just one hairline away.
+    self.item_height = content_height + Screen:scaleBySize(8)
+
+    -- Bigger row gap than the old 6px.  On small 600x800 screens cap it so
+    -- two rows still fit; on phones the scaled value is noticeably larger.
+    local preferred_margin = Screen:scaleBySize(22)
+    local max_margin_for_two_rows = math.floor(
+        (self.available_height - 2 * self.item_height) / 3
     )
+    self.row_margin = math.max(
+        Screen:scaleBySize(12),
+        math.min(preferred_margin, max_margin_for_two_rows)
+    )
+
+    -- Count whole rows including the spacer above the first row and below the
+    -- last one.  This avoids the old approximate division that could report
+    -- one row too many.
+    self.nb_rows = 0
+    while (self.nb_rows + 1) * self.item_height
+            + (self.nb_rows + 2) * self.row_margin <= self.available_height do
+        self.nb_rows = self.nb_rows + 1
+    end
+    self.nb_rows = math.max(1, self.nb_rows)
     self.perpage = math.max(1, self.nb_rows * self.nb_cols)
     self.page_num = math.max(1, math.ceil(#self.item_table / self.perpage))
     if self.page > self.page_num then
