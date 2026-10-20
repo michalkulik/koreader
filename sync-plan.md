@@ -574,16 +574,68 @@ funkcje i inne niebezpieczne wartości przed zapisem. Sprawdzone na żywym
 serwerze: cache zawiera tylko dane, token zostaje, a po restarcie wtyczka jest
 zalogowana i widzi książki offline.
 
-**Ograniczenia etapu 3:**
-- brak okładek na liście — serwerowy `GET /api/v1/books/{id}/cover` nadal
-  zwraca 404; potrzebne wyciąganie okładki z EPUB/PDF i miniatur w kliencie,
-- transfery plików nadal synchroniczne (LuaSocket),
+### Etap 3.5 — okładki, widok startowy i pakiet Kindle (2026-10-20) ✅
+
+**Kod:** `plugins/shelfsync.koplugin/covermenu.lua`,
+`plugins/shelfsync.koplugin/main.lua`, `plugins/shelfsync.koplugin/client.lua`,
+`reader.lua`, `frontend/apps/filemanager/filemanagermenu.lua`;
+serwer: `koreader-server/app/covers.py`, `app/main.py`, testy.
+
+**Okładki:**
+- serwer `0.2.0` obsługuje `GET /api/v1/books/{id}/cover`,
+- EPUB: `META-INF/container.xml` → OPF → `properties="cover-image"`,
+  `meta name="cover"` albo pozycja z „cover” w nazwie,
+- CBZ: pierwsza strona obrazu; format wykrywany po nagłówku (JPEG/PNG/GIF/WebP),
+- brak Pillow i dodatkowych zależności; PDF opcjonalnie przez PyMuPDF, jeśli
+  jest zainstalowany (obecny obraz go nie zawiera),
+- klient pobiera okładki do `DataStorage:getDataDir()/shelf/covers/<book-id>.jpg`,
+  pokazuje placeholder z pierwszą literą, a pobieranie uruchamia w tle
+  (max. 1 próba/godzinę dla brakujących okładek),
+- `CoverMenu` jest lekką siatką 3 kolumn (Kindle 600×800) / 4 kolumn
+  (szersze ekrany), z zachowaniem paginacji i obsługi klawiatury z `Menu`,
+- lewy przycisk w pasku tytułu otwiera akcje: sync, odświeżenie, kolejka,
+  „Continue reading”; long-press na okładce otwiera dotychczasowe akcje książki.
+
+**Widok startowy:**
+- `start_with = "shelf"` obsługiwany w `reader.lua` po zainicjowaniu
+  menedżera plików i wtyczek,
+- pozycja **shelf** w **Start with** menedżera plików,
+- przełącznik **Open shelf at startup** w ustawieniach wtyczki,
+- brak tokenu → logowanie, a po sukcesie automatyczne otwarcie półki.
+
+**Kindle:**
+- zbudowany `koreader-kindlepw2-v2026.17.zip` (target `kindlepw2`, ARM,
+  `koreader/` + `extensions/`), z tą samą wtyczką i widokiem startowym,
+- instalacja przez rozpakowanie do katalogu głównego Kindla,
+- OTA dla Kindle (`kotasync` + `update.tar.xz`) nadal do etapu 6.
+
+**Testy:**
+- serwer: 9 testów `pytest` (w tym okładka EPUB i brak okładki),
+- `covers.py` sprawdzony na `test/juliet.epub` (PNG 732 568 B) i
+  `test/leaves.epub` (JPEG 220 130 B),
+- żywy serwer: `GET /api/v1/books/74aa…/cover` zwraca JPEG 570×900,
+- składnia Lua sprawdzona dla wszystkich zmienionych plików,
+- APK zawiera `shelfsync.koplugin/covermenu.lua`; ZIP Kindle również.
+
+**Wydanie:** [`v2026.17`](https://github.com/michalkulik/koreader/releases/tag/v2026.17)
+— APK arm64 `30 264 975` B, SHA-256
+`c312f0aaa7d5d5fe2288ce41b19258f3f170490a1c2dad3538dcaa75fc08c6ec`;
+Kindle ZIP `40 739 181` B, SHA-256
+`435d72f05489148beca87ff3c09a1a527360ea045c2be813b5dbe8dd883cf33d`.
+Tag `v2026.17` wskazuje commit `1fece1036` (ten sam, z którego zbudowano APK
+i ZIP). Obraz serwera: `ghcr.io/michalkulik/koreader-server:0.2.0`, wdrożony
+jako stack Portainer `koreader-server`; health `200`.
+
+**Ograniczenia etapu 3.5:**
+- okładki PDF/MOBI/AZW3 wymagają dodatkowego renderera — na razie placeholder,
+- transfery plików i okładek nadal synchroniczne (LuaSocket),
 - brak wyszukiwania na półce,
 - brak potwierdzenia `sha256` z `latest.json` przy aktualizacji,
 - brak synchronizacji ustawień i kolekcji (etapy 4–5),
-- wtyczka nie była jeszcze testowana na fizycznym Kindle 10.
+- wtyczka i pakiet Kindle nie były jeszcze testowane na fizycznym Kindle 10.
 
-**Następny krok:** zainstalować `v2026.16` na Androidzie i Kindle 10,
-sprawdzić wbudowane **Update** (powinno pobrać wydanie z forka), potem etap 4
-(synchronizacja ustawień) albo okładki półki.
+**Następny krok:** zainstalować `v2026.17` na Androidzie i sprawdzić siatkę
+okładek, start z półki oraz **Tools → Update → Check for updates**; na Kindle
+10 wgrać ZIP i sprawdzić logowanie, półkę, pobieranie książki i okładki. Potem
+etap 4 (synchronizacja ustawień) albo poprawki z testów sprzętowych.
 
