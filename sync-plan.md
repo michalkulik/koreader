@@ -498,6 +498,12 @@ Zaimplementowane:
 `1b2ad7d013a4835ceff13d1e0b9482485c9ac766b01d1335c1756d2c4a0b1679`).
 Sprawdzone: plugin `shelfsync.koplugin` jest w `assets/module/koreader.7z`.
 
+**Poprawka v2026.12:** [`v2026.12`](https://github.com/michalkulik/koreader/releases/tag/v2026.12)
+— `shelfsync` dopisany do `BUILTIN_PLUGINS` (wcześniej mógł być pomijany jako
+plugin zewnętrzny), log inicjalizacji. `SHA-256` APK:
+`8d4e944704ace4ac816506149501951fb54894ca4c069a60346c98319908b37f`.
+Wpis w menu: **Narzędzia → Shelf sync**.
+
 **Ograniczenia etapu 2:**
 - transfery plików są synchroniczne (LuaSocket) z dialogiem postępu — jak w
   cloud storage; na dużych plikach UI może zamarznąć na czas transferu,
