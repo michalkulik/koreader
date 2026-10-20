@@ -626,6 +626,15 @@ Tag `v2026.17` wskazuje commit `1fece1036` (ten sam, z którego zbudowano APK
 i ZIP). Obraz serwera: `ghcr.io/michalkulik/koreader-server:0.2.0`, wdrożony
 jako stack Portainer `koreader-server`; health `200`.
 
+**Poprawka v2026.18:** [`v2026.18`](https://github.com/michalkulik/koreader/releases/tag/v2026.18)
+— półka jest pełnoekranowa jak **History** (`is_popout=false`,
+`is_borderless=true`, `covers_fullscreen=true`, pełna szerokość i wysokość
+ekranu), zamiast zaokrąglonego wysuwanego drawera. Tag wskazuje commit
+`e3c57c306`. APK `30 301 839` B, SHA-256
+`51af603095a045cce96389e6cdd27b013e77e99871589a7a6d927ea50bcca6de`;
+Kindle ZIP `40 813 064` B, SHA-256
+`99822b83c0f0f66c28ae34c7459dc4688a7ec751d99de18ce2181380a6b8cbfd`.
+
 **Ograniczenia etapu 3.5:**
 - okładki PDF/MOBI/AZW3 wymagają dodatkowego renderera — na razie placeholder,
 - transfery plików i okładek nadal synchroniczne (LuaSocket),
