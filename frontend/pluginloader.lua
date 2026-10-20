@@ -53,6 +53,7 @@ local BUILTIN_PLUGINS = {
     ["profiles"] = true,
     ["qrclipboard"] = true,
     ["readtimer"] = true,
+    ["shelfsync"] = true,
     ["SSH"] = true,
     ["statistics"] = true,
     ["systemstat"] = true,

@@ -69,6 +69,8 @@ function ShelfSync:init()
         base_url = self.server_url,
         token = self.token,
     }
+    logger.info("ShelfSync: initialized", self.server_url,
+        self:isLoggedIn() and "logged in" or "not logged in")
 end
 
 function ShelfSync:saveSettings()
