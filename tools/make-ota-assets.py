@@ -8,13 +8,13 @@ the APK asset name, which is then resolved relative to the same release URL.
 
 Example:
 
-    tools/make-ota-assets.py --apk koreader-android-arm64-v2026.14.apk \
-        --version v2026.14 --out /tmp/opencode/ota-assets
+    tools/make-ota-assets.py --apk koreader-android-arm64-v2026.15.apk \
+        --version v2026.15 --out /tmp/opencode/ota-assets
 
 Then attach both generated files and the APK to the GitHub release:
 
-    gh release create v2026.14 ... \
-        koreader-android-arm64-v2026.14.apk \
+    gh release create v2026.15 ... \
+        koreader-android-arm64-v2026.15.apk \
         /tmp/opencode/ota-assets/koreader-android-arm64-latest-stable \
         /tmp/opencode/ota-assets/latest.json
 """
@@ -50,7 +50,7 @@ def sha256(path: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apk", required=True, help="signed APK path")
-    parser.add_argument("--version", required=True, help="release tag, e.g. v2026.14")
+    parser.add_argument("--version", required=True, help="release tag, e.g. v2026.15")
     parser.add_argument("--out", default="ota-assets", help="output directory")
     parser.add_argument("--repo", default="michalkulik/koreader")
     parser.add_argument("--model", default="android-arm64")

@@ -2,8 +2,8 @@
 # Publish a signed Android APK together with KOReader's in-app OTA assets.
 #
 # Usage:
-#   tools/release-android.sh --apk koreader-android-arm64-v2026.14.apk \
-#       --version v2026.14 --notes-file /tmp/opencode/release-notes-v2026.14.md
+#   tools/release-android.sh --apk koreader-android-arm64-v2026.15.apk \
+#       --version v2026.15 --notes-file /tmp/opencode/release-notes-v2026.15.md
 #
 # The script creates the GitHub release when it does not exist, then uploads
 # (with --clobber):
@@ -44,7 +44,7 @@ done
 [[ -f "${apk}" ]] || { echo "APK not found: ${apk}" >&2; exit 1; }
 apk="$(realpath "${apk}")"
 [[ "${version}" =~ ^v[0-9]{4}\.[0-9]{1,2}(\.[0-9]{1,2})?$ ]] || {
-    echo "version must look like v2026.14 (got: ${version})" >&2
+    echo "version must look like vYYYY.MM (got: ${version})" >&2
     exit 1
 }
 
