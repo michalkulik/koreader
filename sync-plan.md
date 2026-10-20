@@ -681,6 +681,17 @@ SHA-256 `adcb3ed58ac5dfce65a81166bedac4a69a9c44fed59891b95c35fcaf545e6584`;
 Kindle ZIP `40 815 172` B, SHA-256
 `d2c59286d00c3b9e37a27c1c9e5913fbbc146ac540da913d79f4aade9e284133`.
 
+**Poprawka v2026.25:** [`v2026.25`](https://github.com/michalkulik/koreader/releases/tag/v2026.25)
+— usunięta kolizja nazw modułów: `shelfsync.koplugin/covermenu.lua` kolidował
+z `coverbrowser.koplugin/covermenu.lua`, przez co CoverBrowser przy otwieraniu
+**History** dostawał klasę półki i crashował. Moduł zmieniono na
+`shelfcovermenu.lua`. To naprawia też crash przy pagerowaniu w pickerze
+**Add book from device**. Dodano także **Shelf** do menu czytnika nad
+**History** (`reader_menu_order`). Tag: `916e008ce`. APK `30 297 743` B,
+SHA-256 `989a44c0c4031ea9468457c5b858625a553d5967f526f55c3e51a52238a72fa5`;
+Kindle ZIP `40 815 299` B, SHA-256
+`47e5fbdf47d84a092436fcab26acacc2438f3c268132a39c9edab7554beb2042`.
+
 **Ograniczenia etapu 3.5:**
 - okładki PDF/MOBI/AZW3 wymagają dodatkowego renderera — na razie placeholder,
 - transfery plików i okładek nadal synchroniczne (LuaSocket),
