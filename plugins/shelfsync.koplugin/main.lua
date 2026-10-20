@@ -39,6 +39,30 @@ local Client = require("client")
 local Index = require("index")
 local Queue = require("queue")
 
+-- The JSON decoder represents `null` with a function sentinel. LuaSettings
+-- cannot serialize functions (it would write "function: 0x...", producing a
+-- corrupt settings file and losing the device token), so strip anything that
+-- is not a plain Lua value before caching server responses.
+local function sanitize_for_storage(value)
+    local kind = type(value)
+    if kind == "string" or kind == "number" or kind == "boolean" then
+        return value
+    end
+    if kind ~= "table" then
+        return nil
+    end
+    local clean = {}
+    for key, item in pairs(value) do
+        if type(key) == "string" or type(key) == "number" then
+            local safe = sanitize_for_storage(item)
+            if safe ~= nil then
+                clean[key] = safe
+            end
+        end
+    end
+    return clean
+end
+
 local settings_dir = DataStorage:getSettingsDir()
 
 local ShelfSync = WidgetContainer:extend{
@@ -64,7 +88,7 @@ function ShelfSync:init()
     self.sort_mode = self.settings:readSetting("sort_mode", "recent")
     self.last_sync = tonumber(self.settings:readSetting("last_sync"))
     self.last_error = tonumber(self.settings:readSetting("last_error"))
-    self.library = self.settings:readSetting("library_cache", {})
+    self.library = sanitize_for_storage(self.settings:readSetting("library_cache", {}))
     self.library_time = tonumber(self.settings:readSetting("library_time")) or 0
 
     if not self.device_id then
@@ -332,6 +356,7 @@ function ShelfSync:refreshLibrary()
         self:handleError(code, err, _("library"))
         return
     end
+    books = sanitize_for_storage(books)
     self.library = books
     self.library_time = os.time()
     self.settings:saveSetting("library_cache", books)
