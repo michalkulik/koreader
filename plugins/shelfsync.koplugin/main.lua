@@ -37,8 +37,26 @@ local T = require("ffi/util").template
 
 local Client = require("client")
 local CoverMenu = require("covermenu")
+local FileChooser = require("ui/widget/filechooser")
 local Index = require("index")
 local Queue = require("queue")
+
+-- CoverBrowser globally swaps FileChooser's update/layout methods for mosaic
+-- mode. A second FileChooser opened from the shelf would then share that
+-- global state and can crash while paging (the background cover extraction
+-- expects the file manager's own chooser). This subclass keeps the plain
+-- list layout while still using FileChooser's navigation and file filtering.
+local PlainFileChooser = FileChooser:extend{}
+function PlainFileChooser:_recalculateDimen(no_recalculate_dimen)
+    Menu._recalculateDimen(self, no_recalculate_dimen)
+end
+function PlainFileChooser:updateItems(select_number, no_recalculate_dimen)
+    Menu.updateItems(self, select_number, no_recalculate_dimen)
+    self.path_items[self.path] = (self.page - 1) * self.perpage + (select_number or 1)
+end
+function PlainFileChooser:onCloseWidget()
+    Menu.onCloseWidget(self)
+end
 
 -- The JSON decoder represents `null` with a function sentinel. LuaSettings
 -- cannot serialize functions (it would write "function: 0x...", producing a
@@ -904,7 +922,6 @@ function ShelfSync:uploadPathToShelf(path)
 end
 
 function ShelfSync:addBookFromDevice()
-    local FileChooser = require("ui/widget/filechooser")
     local ui = self.ui
     if not (ui and ui.folder_shortcuts) then
         local ok, FileManager = pcall(require, "apps/filemanager/filemanager")
@@ -913,11 +930,12 @@ function ShelfSync:addBookFromDevice()
         end
     end
     if not (ui and ui.folder_shortcuts) then
-        -- FileChooser only needs this one UI method when it is not embedded in
+        -- FileChooser only needs these UI helpers when it is not embedded in
         -- the file manager (e.g. the shelf was opened from the reader).
         ui = {
             folder_shortcuts = {
                 hasFolderShortcut = function() return false end,
+                getShortcutFullName = function() return nil end,
             },
         }
     end
@@ -925,7 +943,7 @@ function ShelfSync:addBookFromDevice()
         or G_reader_settings:readSetting("lastdir")
         or filemanagerutil.getHomeFolder()
     local chooser
-    chooser = FileChooser:new{
+    chooser = PlainFileChooser:new{
         ui = ui,
         path = start_path,
         title = _("Add book to shelf"),
@@ -942,14 +960,24 @@ function ShelfSync:addBookFromDevice()
     UIManager:show(chooser)
 end
 
-function ShelfSync:showShelfActions(menu, books)
+function ShelfSync:showShelfActions(shelf_menu, books)
     local online = NetworkMgr:isOnline()
     local pending = self:pendingCount()
+    local actions_menu
+    local function close_actions()
+        if actions_menu then
+            UIManager:close(actions_menu)
+            actions_menu = nil
+        end
+    end
     local items = {
         {
             text = _("Add book from device"),
             callback = function()
-                if menu then UIManager:close(menu) end
+                close_actions()
+                -- Free the cover grid and its cached images before opening
+                -- the file chooser (avoids OOM/crashes while paging there).
+                if shelf_menu then UIManager:close(shelf_menu) end
                 self:addBookFromDevice()
             end,
         },
@@ -957,12 +985,16 @@ function ShelfSync:showShelfActions(menu, books)
             text = _("Synchronize now"),
             mandatory = T(_("%1 · %2 pending"),
                 online and self:shelfStatusText() or _("offline"), pending),
-            callback = function() self:syncNow() end,
+            callback = function()
+                close_actions()
+                self:syncNow()
+            end,
         },
         {
             text = _("Refresh shelf"),
             callback = function()
-                if menu then UIManager:close(menu) end
+                close_actions()
+                if shelf_menu then UIManager:close(shelf_menu) end
                 self:showShelf()
             end,
         },
@@ -971,7 +1003,8 @@ function ShelfSync:showShelfActions(menu, books)
             callback = function()
                 self.view_mode = self.view_mode == "list" and "grid" or "list"
                 self:saveSettings()
-                if menu then UIManager:close(menu) end
+                close_actions()
+                if shelf_menu then UIManager:close(shelf_menu) end
                 self:showShelf()
             end,
         },
@@ -980,7 +1013,10 @@ function ShelfSync:showShelfActions(menu, books)
         table.insert(items, {
             text = T(_("Pending changes: %1"), pending),
             mandatory = self.last_error and T(_("%1 errors"), self.last_error) or nil,
-            callback = function() self:showQueue() end,
+            callback = function()
+                close_actions()
+                self:showQueue()
+            end,
         })
     end
     local continue = self:continueBook(books)
@@ -989,15 +1025,19 @@ function ShelfSync:showShelfActions(menu, books)
             text = T(_("Continue reading: %1"), self:coverTitle(continue)),
             mandatory = T(_("%1%"),
                 math.floor((continue.progress.percentage or 0) * 100)),
-            callback = function() self:openBook(continue) end,
+            callback = function()
+                close_actions()
+                self:openBook(continue)
+            end,
         })
     end
-    UIManager:show(Menu:new{
+    actions_menu = Menu:new{
         title = T(_("Shelf · %1"), online and self:shelfStatusText() or _("offline")),
         item_table = items,
         width = Device.screen:getWidth() * 0.9,
         title_bar_fm_style = true,
-    })
+    }
+    UIManager:show(actions_menu)
 end
 
 function ShelfSync:showShelf()
