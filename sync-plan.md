@@ -785,6 +785,17 @@ KPM `.kpkg` `41 207 916` B, SHA-256
 `3c81feab4c655d67e8f73ac5b0b1e75f2e408cc60a83588f3c13d59416be9281`.
 Manifest KPM wskazuje `[2026, 33, 0]`.
 
+**Wydanie v2026.38:** [`v2026.38`](https://github.com/michalkulik/koreader/releases/tag/v2026.38)
+— ikonka Shelf przeniesiona na **pierwszą pozycję** górnego menu czytnika
+(przed TOC/Bookmarks); bez zmian względem v2026.37 w mierzeniu kafelków
+Shelf i odstępach między rzędami. Tag `39fe5820b`. APK `30 064 271` B, SHA-256
+`14f97cad913b173d5c1bd7d4853302bfb8d03ba2ffc388ab1f65d141be9ac3f9`;
+Kindle ZIP `40 323 785` B, SHA-256
+`d62736e548271394df48c7450ca5ccda113c2a42509dad1d784d5c0cfe309299`;
+KPM `.kpkg` `41 128 727` B, SHA-256
+`2f513f75256c618dd1003e889d06048cbc36b9e5b251dec0abe0e929504a8e90`.
+Manifest KPM wskazuje `[2026, 38, 0]`.
+
 **Wydanie v2026.37:** [`v2026.37`](https://github.com/michalkulik/koreader/releases/tag/v2026.37)
 — poprawki Shelf: wysokość kafelka mierzona z rzeczywistych czcionek
 (okładka + pasek + tytuł + autor + procent) plus zapas pod procentem i większy
