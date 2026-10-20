@@ -785,6 +785,19 @@ KPM `.kpkg` `41 207 916` B, SHA-256
 `3c81feab4c655d67e8f73ac5b0b1e75f2e408cc60a83588f3c13d59416be9281`.
 Manifest KPM wskazuje `[2026, 33, 0]`.
 
+**Wydanie v2026.37:** [`v2026.37`](https://github.com/michalkulik/koreader/releases/tag/v2026.37)
+— poprawki Shelf: wysokość kafelka mierzona z rzeczywistych czcionek
+(okładka + pasek + tytuł + autor + procent) plus zapas pod procentem i większy
+odstęp między rzędami; `shelf_button` ma wpis w `*_menu_order.lua`, więc
+`MenuSorter` nie usuwa ikonki Shelf z górnego menu (jest przed zakładką
+TOC/Bookmarks). Tag `53991ccde`. APK `30 064 271` B, SHA-256
+`acd9c6fbe267d3a584503396c4181698715815da41c33e1e88620a4b22d59b5f`;
+Kindle ZIP `40 323 791` B, SHA-256
+`6e97bee302e331836fcf931bfa0745578077ad909819e7d9b2adee07fe6e6a06`;
+KPM `.kpkg` `41 130 110` B, SHA-256
+`9a0d93f586b1cef457599a7b3f64a43694c84963acd30c7ba3eea4d6d48bed2d`.
+Manifest KPM wskazuje `[2026, 37, 0]`.
+
 **Wydanie v2026.36:** [`v2026.36`](https://github.com/michalkulik/koreader/releases/tag/v2026.36)
 — poprawka do v2026.35: ikonka **Shelf** w górnym menu menedżera plików
 odwoływała się do `self` spoza metody (`getDefaultMenuButtons` nie dostawał
