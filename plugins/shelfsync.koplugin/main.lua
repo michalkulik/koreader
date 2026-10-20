@@ -1209,32 +1209,23 @@ function ShelfSync:showShelfActions(shelf_menu, books)
     UIManager:show(actions_menu)
 end
 
-function ShelfSync:newShelfTitleBar(title, subtitle, get_menu, all_books)
-    return TitleBar:new{
-        width = Device.screen:getWidth(),
-        fullscreen = true,
-        align = "center",
-        title = title,
-        subtitle = subtitle,
-        title_top_padding = Device.screen:scaleBySize(6),
-        button_padding = Device.screen:scaleBySize(5),
-        left_icon = "appbar.menu",
-        left_icon_size_ratio = 1,
-        left_icon_tap_callback = function()
-            self:showShelfActions(get_menu(), all_books)
-        end,
-        right_icon = "appbar.search",
-        right_icon_size_ratio = 1,
-        right_icon_tap_callback = function()
-            self:showShelfSearch(all_books)
-        end,
-        right_icon_hold_callback = function()
-            if self.search_query then
-                self.search_query = nil
-                self:showShelf()
-            end
-        end,
-    }
+function ShelfSync:attachShelfSearch(menu, all_books)
+    local title_bar = menu and menu.title_bar
+    if not title_bar then return end
+    -- Menu creates a close button on the right by default. Reuse that slot for
+    -- search; the full-screen shelf is closed with Back, not with an X button.
+    title_bar:setRightIcon("appbar.search")
+    local button = title_bar.right_button
+    if not button then return end
+    button.callback = function()
+        self:showShelfSearch(all_books)
+    end
+    button.hold_callback = function()
+        if self.search_query then
+            self.search_query = nil
+            self:showShelf()
+        end
+    end
 end
 
 function ShelfSync:showShelf()
@@ -1272,7 +1263,6 @@ function ShelfSync:showShelf()
         subtitle = T(_("%1 books · %2 pending"), #books, pending)
     end
     local menu
-    local title_bar = self:newShelfTitleBar(title, subtitle, function() return menu end, all_books)
 
     if self.view_mode == "list" then
         local items = {}
@@ -1285,11 +1275,14 @@ function ShelfSync:showShelf()
             })
         end
         menu = CoverMenu.ListMenu:new{
-            custom_title_bar = title_bar,
+            title = title,
+            subtitle = subtitle,
             item_table = items,
             width = Device.screen:getWidth(),
             height = Device.screen:getHeight(),
             title_bar_fm_style = true,
+            title_bar_left_icon = "appbar.menu",
+            on_left_button_tap = function() self:showShelfActions(menu, all_books) end,
         }
     else
         local items = {}
@@ -1304,16 +1297,19 @@ function ShelfSync:showShelf()
             })
         end
         menu = CoverMenu:new{
-            custom_title_bar = title_bar,
+            title = title,
+            subtitle = subtitle,
             item_table = items,
             width = Device.screen:getWidth(),
             height = Device.screen:getHeight(),
             title_bar_fm_style = true,
+            title_bar_left_icon = "appbar.menu",
+            on_left_button_tap = function() self:showShelfActions(menu, all_books) end,
             on_book_tap = function(entry) self:openBook(entry.book) end,
             on_book_hold = function(entry) self:showBookActions(entry.book) end,
         }
     end
-    title_bar.show_parent = menu
+    self:attachShelfSearch(menu, all_books)
 
     if self.shelf_menu and self.shelf_menu ~= menu then
         UIManager:close(self.shelf_menu)
