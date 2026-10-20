@@ -727,6 +727,19 @@ KPM `.kpkg` `41 204 573` B, SHA-256
 `8f1747af4a80ad67664762987aabfda304b5d29b980748be28f8b60610de0e50`.
 Manifest KPM wskazuje `[2026, 28, 0]`.
 
+**Poprawka v2026.29:** [`v2026.29`](https://github.com/michalkulik/koreader/releases/tag/v2026.29)
+— naprawiona inicjalizacja wtyczki `androidkeyboard` (w `v2026.28` odwoływała
+się do usuniętych metod i nie podłączała mostka IME, przez co m.in. wyszukiwanie
+plików dalej używało wbudowanej klawiatury). `versionCode` liczony teraz z
+numeru wydania (`202629002`), niezależnie od głębokości historii Git. Tag
+`fecc3ebed`. APK `30 121 615` B, SHA-256
+`22a87b2e1d6ddbf29efba7cd2123f356d80124c48ec9a3d722c8b92b40f03672`;
+Kindle ZIP `40 415 602` B, SHA-256
+`546b7de42e51a62204280aeccbf37d02dc15c712ba033cf5dddf0db963c239c6`;
+KPM `.kpkg` `41 204 580` B, SHA-256
+`cdaaf2c90d61b74c4aa0bf1dd4ed2850e0bc96f219a7b94164446f9d715007cd`.
+Manifest KPM wskazuje `[2026, 29, 0]`.
+
 **KPM (2026-10-20):** osobne publiczne repo
 [`michalkulik/kpm-koreader`](https://github.com/michalkulik/kpm-koreader) z
 manifestem KPM i pakietem `koreader-mkulik` (`.kpkg`, target `kindlepw2`).
