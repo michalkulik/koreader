@@ -662,6 +662,16 @@ Tag: `ea9f50189`. APK `30 301 839` B, SHA-256
 Kindle ZIP `40 814 490` B, SHA-256
 `549ac9d147742a84e453bdeab2d9c9b5589d602dc2206656163c26cff6896983`.
 
+**Poprawka v2026.23:** [`v2026.23`](https://github.com/michalkulik/koreader/releases/tag/v2026.23)
+— crash przy przełączaniu stron w wyborze plików do **Add book from device**.
+Wybór plików używa teraz własnej, listowej wersji `PlainFileChooser` (nie
+dziedziczy globalnego trybu mosaic z CoverBrowser), półka z okładkami jest
+zamykana przed otwarciem pickera, a stub UI ma komplet metod
+`folder_shortcuts`. Tag: `e474cc29c`. APK `30 297 743` B, SHA-256
+`bd7280de6cdd5389468f23f7c857ae26c8aaef46d959a055e88615d610554cd6`;
+Kindle ZIP `40 814 955` B, SHA-256
+`b916144a41f11cc01aea9948a1ff234192044427157bd5bdbdde2512b47d91e5`.
+
 **Ograniczenia etapu 3.5:**
 - okładki PDF/MOBI/AZW3 wymagają dodatkowego renderera — na razie placeholder,
 - transfery plików i okładek nadal synchroniczne (LuaSocket),
