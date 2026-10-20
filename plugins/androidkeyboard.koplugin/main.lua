@@ -226,12 +226,6 @@ local function makeIMEFunctions(android, classes)
 end
 
 function AndroidKeyboard:init()
-    self:onDispatcherRegisterActions()
-    if self.ui and self.ui.menu then
-        self.ui.menu:registerToMainMenu(self)
-    end
-    self:backgroundUpdateCheck()
-
     local ok, android = pcall(require, "android")
     if not ok then logger.warn("KOBoard: no android module:", android); return end
 
