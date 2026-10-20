@@ -635,6 +635,23 @@ ekranu), zamiast zaokrąglonego wysuwanego drawera. Tag wskazuje commit
 Kindle ZIP `40 813 064` B, SHA-256
 `99822b83c0f0f66c28ae34c7459dc4688a7ec751d99de18ce2181380a6b8cbfd`.
 
+**Wydanie v2026.19:** [`v2026.19`](https://github.com/michalkulik/koreader/releases/tag/v2026.19)
+— **Shelf** w głównym menu podręcznym nad **History**, przełącznik
+**View as list / View as covers** (zapamiętywany), pełnoekranowa lista oraz
+**pasek postępu pod okładką** z procentem czytania. Tag: `57a46c273`.
+APK `30 297 743` B, SHA-256
+`6a5e7af3771e490ef73cf2313ab494474fe623c20e61d48028c4bdc8c5bfddef`;
+Kindle ZIP `40 813 599` B, SHA-256
+`aa6b16ad40b171630a71f73c4c3627dcabe5cd52c22c48c393433f1e0e6f78a7`.
+
+**Wydanie v2026.20:** [`v2026.20`](https://github.com/michalkulik/koreader/releases/tag/v2026.20)
+— procent postępu jest pokazywany **przed** autorem, więc długie nazwisko nie
+wypycha go z kafla; reszta funkcji jak w `v2026.19`. Tag: `23b9b77c4`.
+APK `30 281 359` B, SHA-256
+`0dfc36ffba508f63bee7c98716cc702ae9016e90e798cd68c595fb063c5ad6fc`;
+Kindle ZIP `40 813 662` B, SHA-256
+`1f39df5a46eff2490e093c0dd43181c54524e9c3f8228db36599e6117e24f645`.
+
 **Ograniczenia etapu 3.5:**
 - okładki PDF/MOBI/AZW3 wymagają dodatkowego renderera — na razie placeholder,
 - transfery plików i okładek nadal synchroniczne (LuaSocket),
