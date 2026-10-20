@@ -130,8 +130,11 @@ function CoverTile:onHoldSelect()
 end
 
 local CoverMenu = Menu:extend{
-    is_popout = true,
-    is_borderless = false,
+    -- Full-screen view, like the file manager's History/BookList, instead of
+    -- a rounded popout drawer.
+    is_popout = false,
+    is_borderless = true,
+    covers_fullscreen = true,
     title_bar_fm_style = true,
     nb_cols = 3,
     nb_rows = 2,
