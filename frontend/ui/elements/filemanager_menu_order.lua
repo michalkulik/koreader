@@ -2,6 +2,7 @@ local Device = require("device")
 
 local order = {
     ["KOMenu:menu_buttons"] = {
+        "shelf_button",
         "filemanager_settings",
         "setting",
         "tools",

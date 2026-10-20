@@ -33,6 +33,17 @@ local function getDefaultMenuButtons()
             -- top menu
         },
         -- items in top menu
+        shelf_button = {
+            icon = "appbar.pageview",
+            remember = false,
+            callback = function()
+                self:onCloseFileManagerMenu()
+                local plugin = PluginLoader:getPluginInstance("shelfsync")
+                if plugin then
+                    plugin:showShelf()
+                end
+            end,
+        },
         filemanager_settings = { icon = "appbar.filebrowser" },
         setting = { icon = "appbar.settings" },
         tools = { icon = "appbar.tools" },

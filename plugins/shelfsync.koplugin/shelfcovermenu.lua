@@ -17,6 +17,7 @@ local HorizontalGroup = require("ui/widget/horizontalgroup")
 local HorizontalSpan = require("ui/widget/horizontalspan")
 local ImageWidget = require("ui/widget/imagewidget")
 local InputContainer = require("ui/widget/container/inputcontainer")
+local LeftContainer = require("ui/widget/container/leftcontainer")
 local Menu = require("ui/widget/menu")
 local ProgressWidget = require("ui/widget/progresswidget")
 local Size = require("ui/size")
@@ -233,6 +234,10 @@ function CoverMenu:_recalculateDimen()
     self.available_height = inner_h - top_height - bottom_height
 
     self.item_margin = Screen:scaleBySize(6)
+    -- The cover text block needs more breathing room vertically than
+    -- horizontally; otherwise the next row's cover can touch the progress
+    -- label of the row above on small screens.
+    self.row_margin = Screen:scaleBySize(14)
     self.nb_cols = inner_w >= Screen:scaleBySize(800) and 4 or 3
     self.item_width = math.floor(
         (inner_w - (self.nb_cols + 1) * self.item_margin) / self.nb_cols
@@ -249,8 +254,8 @@ function CoverMenu:_recalculateDimen()
     self.nb_rows = math.max(
         1,
         math.floor(
-            (self.available_height - self.item_margin)
-                / (self.item_height + self.item_margin)
+            (self.available_height - self.row_margin)
+                / (self.item_height + self.row_margin)
         )
     )
     self.perpage = math.max(1, self.nb_rows * self.nb_cols)
@@ -285,9 +290,9 @@ function CoverMenu:_updateItemsBuildUI()
                 table.insert(self.layout, line_layout)
             end
             line_layout = {}
-            table.insert(self.item_group, VerticalSpan:new{ width = self.item_margin })
+            table.insert(self.item_group, VerticalSpan:new{ width = self.row_margin })
             cur_row = HorizontalGroup:new{}
-            table.insert(self.item_group, CenterContainer:new{
+            table.insert(self.item_group, LeftContainer:new{
                 dimen = Geom:new{
                     w = self.inner_dimen.w,
                     h = self.item_height,
@@ -319,7 +324,7 @@ function CoverMenu:_updateItemsBuildUI()
     if next(line_layout) then
         table.insert(self.layout, line_layout)
     end
-    table.insert(self.item_group, VerticalSpan:new{ width = self.item_margin })
+    table.insert(self.item_group, VerticalSpan:new{ width = self.row_margin })
     return select_number
 end
 

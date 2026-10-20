@@ -62,12 +62,21 @@ function ReaderMenu:getDefaultMenuButtons()
         setting = { icon = "appbar.settings" },
         tools = { icon = "appbar.tools" },
         search = { icon = "appbar.search" },
-        filemanager = {
-            icon = "appbar.filebrowser",
+        shelf_button = {
+            icon = "appbar.pageview",
             remember = false,
             callback = function()
                 self:onTapCloseMenu()
-                local file = self.ui.document.file
+                local plugin = PluginLoader:getPluginInstance("shelfsync")
+                if plugin then
+                    plugin:showShelf()
+                end
+            end,
+            -- Keep a way back to the file browser now that its own top-menu
+            -- button is gone: long-press the Shelf button.
+            hold_callback = function()
+                self:onTapCloseMenu()
+                local file = self.ui.document and self.ui.document.file
                 self.ui:onClose()
                 self.ui:showFileManager(file)
             end,
