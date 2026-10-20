@@ -402,7 +402,7 @@ Na Androidzie `Device:otaModel()` zwraca `android-arm64` + typ `link`: pobierany
 ## 10. Etapy wdrożenia
 
 1. **Serwer v1** — auth, biblioteka, upload/download, postęp, kosync-compat, Docker + testy. ✅ **ukończony 2026-10-20** (szczegóły w §12).
-2. **Plugin v1** — kolejka, indeks, sync postępu, upload przy otwarciu, download z półki.
+2. **Plugin v1** — kolejka, indeks, sync postępu, upload przy otwarciu, download z półki. 🚧 **w toku (2026-10-20)** — kod w §12, etap 2.
 3. **UI półki** — lista, okładki, „Czytaj dalej”, status offline, ręczny sync.
 4. **Ustawienia** — profil ustawień na koncie: UI/czytnik/gesty, podgląd różnic, backup, rollback, czcionki własne.
 5. **Kolekcje** — dwukierunkowa synchronizacja z `collection.lua`.
@@ -465,4 +465,42 @@ dedupe po `partial_md5`, zgodność rozmiaru, rewizje i konflikt postępu, auth)
   *Custom sync server* na `http://192.168.69.11:8099/` i zaloguj się na konto.
 - Serwer działa po HTTP w LAN. HTTPS przez NPM/Caddy i dostęp z zewnątrz — kolejny krok.
 - Backup: kopia `/srv/koreader-server/data`.
+
+### Etap 2 — plugin v1 (2026-10-20) 🚧
+
+**Kod:** `plugins/shelfsync.koplugin/` w `michalkulik/koreader`, commit `d43668bd7`.
+
+Pliki:
+- `client.lua` — klient HTTP/JSON + streaming upload/download (LuaSocket/ltn12),
+- `index.lua` — trwały indeks ścieżka lokalna ↔ `book_id` + `last_rev`,
+- `queue.lua` — kolejka offline uploadów i postępów (max 5 prób),
+- `main.lua` — menu, logowanie tokenem, hooki czytnika, półka,
+- `_meta.lua` — metadane wtyczki.
+
+Zaimplementowane:
+- logowanie do serwera przez `POST /api/v1/auth/token` (token + `device_id`,
+  hasło nie jest zapisywane),
+- menu **Shelf sync**: Półka, Synchronizuj teraz, Wyślij bieżącą książkę,
+  Kolejka, Ustawienia,
+- pull postępu przy otwarciu książki (`onReaderReady`) i push przy
+  `onPageUpdate` (co 10 stron), `onCloseDocument`, `onSuspend`,
+- automatyczny upload otwieranej książki (kolejka + `PUT /file`),
+- półka z listą książek z serwera: pobranie do wybranego katalogu i otwarcie,
+- ustawienia: adres serwera, login/logout, nazwa urządzenia, katalog pobierania,
+  auto-upload, auto-progress,
+- off-line: postęp i upload trafiają do kolejki, wznawiane po sieci / ręcznie.
+
+**HTTPS:** `https://shelf.mkulik.eu` (NPM → `192.168.69.11:8099`) zweryfikowany:
+`POST /api/v1/auth/token` i `GET /api/v1/books` → 200.
+
+**Ograniczenia etapu 2:**
+- transfery plików są synchroniczne (LuaSocket) z dialogiem postępu — jak w
+  cloud storage; na dużych plikach UI może zamarznąć na czas transferu,
+- brak okładek, sortowania i wyszukiwania na półce (etap 3),
+- brak synchronizacji ustawień i kolekcji (etapy 4–5),
+- wtyczka nie jest jeszcze w wydanym APK — potrzebny nowy build i test na
+  KindleBasic4 oraz Androidzie.
+
+**Następny krok:** zbudować APK z wtyczką, zainstalować na Kindle 10 i Androidzie,
+przetestować login/upload/download/postęp, poprawić błędy, potem etap 3 (UI półki).
 
