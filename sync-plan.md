@@ -785,6 +785,19 @@ KPM `.kpkg` `41 207 916` B, SHA-256
 `3c81feab4c655d67e8f73ac5b0b1e75f2e408cc60a83588f3c13d59416be9281`.
 Manifest KPM wskazuje `[2026, 33, 0]`.
 
+**Wydanie v2026.35:** [`v2026.35`](https://github.com/michalkulik/koreader/releases/tag/v2026.35)
+— rzędy okładek na Shelf wyrównane do lewej, zwiększony odstęp między rzędami
+(okładka nie zasłania już procentu książki wyżej), stała ikonka **Shelf**
+po lewej w górnym menu czytnika i menedżera plików, usunięta ikonka
+**File browser** z menu czytnika (dostęp przez długie przytrzymanie Shelf).
+Tag `7da5cb8b2`. APK `30 068 367` B, SHA-256
+`5a142423c500b752e95671c74553368cc9a9259b1024aea5ea683a9a0e9a35f8`;
+Kindle ZIP `40 323 215` B, SHA-256
+`033ab7f0372968ac6ffa16d037027a5fe522ad6b53f69b9fafcf086285d6c8ad`;
+KPM `.kpkg` `41 128 712` B, SHA-256
+`2c54957d34d2878675b1b77ab5fb665c58b82bc710ff610a2f08a6308f567400`.
+Manifest KPM wskazuje `[2026, 35, 0]`.
+
 **Wydanie v2026.34:** [`v2026.34`](https://github.com/michalkulik/koreader/releases/tag/v2026.34)
 — usunięto wtyczki **Calibre**, **Exporter** (Export highlights and notes),
 **Text editor**, **Terminal** i **HTTP inspector** wraz z ich pozycjami w menu
