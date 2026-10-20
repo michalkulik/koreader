@@ -700,6 +700,16 @@ SHA-256 `0cb91093ed0f66e94c721c1b857b38772434c276274afdaab0a86d94531c4bcf`;
 Kindle ZIP `40 815 262` B, SHA-256
 `4f85308f117d6d6c1e6aeff80dd138dca7035b561fbac80610e99724a1d77cb6`.
 
+**KPM (2026-10-20):** osobne publiczne repo
+[`michalkulik/kpm-koreader`](https://github.com/michalkulik/kpm-koreader) z
+manifestem KPM i pakietem `koreader-mkulik` (`.kpkg`, target `kindlepw2`).
+Instalacja: `;kpm uninstall koreader` (jeśli był oficjalny), `;kpm add-repo
+https://raw.githubusercontent.com/michalkulik/kpm-koreader/main/manifest.json`,
+`;kpm update`, `;kpm install koreader-mkulik`. Aktualizacje:
+`;kpm update` + `;kpm upgrade`. Pakiet instaluje do `/mnt/us/koreader` i
+zachowuje `settings` przy aktualizacji; nie instalować równolegle z oficjalnym
+`koreader` z repozytorium KindleModding.
+
 **Ograniczenia etapu 3.5:**
 - okładki PDF/MOBI/AZW3 wymagają dodatkowego renderera — na razie placeholder,
 - transfery plików i okładek nadal synchroniczne (LuaSocket),
