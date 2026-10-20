@@ -493,14 +493,18 @@ Zaimplementowane:
 **HTTPS:** `https://shelf.mkulik.eu` (NPM → `192.168.69.11:8099`) zweryfikowany:
 `POST /api/v1/auth/token` i `GET /api/v1/books` → 200.
 
+**Wydanie testowe:** [`v2026.11`](https://github.com/michalkulik/koreader/releases/tag/v2026.11)
+— APK arm64 z wtyczką, podpisany tym samym kluczem (`SHA-256`
+`1b2ad7d013a4835ceff13d1e0b9482485c9ac766b01d1335c1756d2c4a0b1679`).
+Sprawdzone: plugin `shelfsync.koplugin` jest w `assets/module/koreader.7z`.
+
 **Ograniczenia etapu 2:**
 - transfery plików są synchroniczne (LuaSocket) z dialogiem postępu — jak w
   cloud storage; na dużych plikach UI może zamarznąć na czas transferu,
 - brak okładek, sortowania i wyszukiwania na półce (etap 3),
 - brak synchronizacji ustawień i kolekcji (etapy 4–5),
-- wtyczka nie jest jeszcze w wydanym APK — potrzebny nowy build i test na
-  KindleBasic4 oraz Androidzie.
+- wtyczka nie była jeszcze testowana na fizycznym Kindle 10 i Androidzie.
 
-**Następny krok:** zbudować APK z wtyczką, zainstalować na Kindle 10 i Androidzie,
+**Następny krok:** zainstalować `v2026.11` na Kindle 10 i Androidzie,
 przetestować login/upload/download/postęp, poprawić błędy, potem etap 3 (UI półki).
 
