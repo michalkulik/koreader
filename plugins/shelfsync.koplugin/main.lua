@@ -1604,9 +1604,29 @@ end
 
 -- -------------------------------------------------------------------- hooks
 
+function ShelfSync:cancelProgressPush()
+    if self.progress_push_timer then
+        pcall(function() UIManager:unschedule(self.progress_push_timer) end)
+        self.progress_push_timer = nil
+    end
+end
+
+function ShelfSync:scheduleProgressPush(delay)
+    if not self:isLoggedIn() or not self.auto_progress then return end
+    self:cancelProgressPush()
+    self.progress_push_timer = function()
+        self.progress_push_timer = nil
+        if self.ui and self.ui.document then
+            self:pushProgress(false)
+        end
+    end
+    UIManager:scheduleIn(delay or 2, self.progress_push_timer)
+end
+
 function ShelfSync:onReaderReady()
     if not self:isLoggedIn() then return end
     self.page_counter = 0
+    self:cancelProgressPush()
     -- Run upload first, then pull. This matters for books opened from an
     -- Android file manager: a brand-new book has no server entry yet, so
     -- pulling before creating it would find nothing. One second still lets
@@ -1627,11 +1647,15 @@ function ShelfSync:onPageUpdate(page)
     self.page_counter = (self.page_counter or 0) + 1
     if self.page_counter >= 10 then
         self.page_counter = 0
-        self:pushProgress(false)
+        -- Do not block page turning with an HTTP request. Reschedule the
+        -- push after every burst; it runs once the reader has been idle for
+        -- two seconds. Fast page skipping therefore never waits for network.
+        self:scheduleProgressPush(2)
     end
 end
 
 function ShelfSync:onCloseDocument()
+    self:cancelProgressPush()
     if self:isLoggedIn() then
         self:pushProgress(false)
         UIManager:scheduleIn(2, function() self:flushQueue(false) end)
@@ -1639,6 +1663,7 @@ function ShelfSync:onCloseDocument()
 end
 
 function ShelfSync:onSuspend()
+    self:cancelProgressPush()
     if self:isLoggedIn() then
         self:pushProgress(false)
     end
