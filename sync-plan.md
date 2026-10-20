@@ -700,6 +700,20 @@ SHA-256 `0cb91093ed0f66e94c721c1b857b38772434c276274afdaab0a86d94531c4bcf`;
 Kindle ZIP `40 815 262` B, SHA-256
 `4f85308f117d6d6c1e6aeff80dd138dca7035b561fbac80610e99724a1d77cb6`.
 
+**Poprawka v2026.27:** [`v2026.27`](https://github.com/michalkulik/koreader/releases/tag/v2026.27)
+— półka pamięta lokalnie ostatnio otwartą książkę (sortowanie „Recently read”
+i **Continue reading** biorą pod uwagę także samo otwarcie, nie tylko udany
+push postępu), postęp jest wysyłany po każdej zmianie strony z 2-sekundowym
+debounce, a otwarcie książki zamyka menu półki i pokazuje **Opening…** do czasu
+gotowości czytnika. Dodano awaryjne rozpoznawanie tapnięć kafli po zamknięciu
+bocznego menu. Tag `1342e9b29`. APK `30 162 575` B, SHA-256
+`4a5cf07de352386e5da7392c6b72899ecfdf019de0623355914aebc9481ae154`;
+Kindle ZIP `40 490 308` B, SHA-256
+`3cc5439d4fc39399a9510245c57129019c70cfbebc0ae5d222afb0ceece97d35`;
+KPM `.kpkg` `41 269 314` B, SHA-256
+`ec0db55a16f264f521b58c27b35794b4a43ade938edf226c0b0b3d1d4d32191f`.
+Manifest KPM (serwer i GitHub Pages) wskazuje wersję `[2026, 27, 0]`.
+
 **KPM (2026-10-20):** osobne publiczne repo
 [`michalkulik/kpm-koreader`](https://github.com/michalkulik/kpm-koreader) z
 manifestem KPM i pakietem `koreader-mkulik` (`.kpkg`, target `kindlepw2`).
