@@ -714,6 +714,19 @@ KPM `.kpkg` `41 269 314` B, SHA-256
 `ec0db55a16f264f521b58c27b35794b4a43ade938edf226c0b0b3d1d4d32191f`.
 Manifest KPM (serwer i GitHub Pages) wskazuje wersję `[2026, 27, 0]`.
 
+**Wydanie v2026.28:** [`v2026.28`](https://github.com/michalkulik/koreader/releases/tag/v2026.28)
+— w sekcji **Keyboard** dodano opcję **Use Android system keyboard** (systemowy
+IME Androida przez wbudowaną wtyczkę `androidkeyboard`, domyślnie wyłączoną;
+implementacja oparta na KOBoard). Usunięto wtyczki: **Progress sync**
+(`kosync`), **Cloud storage**, **Wallabag**, **News downloader** oraz
+**QR from clipboard**. Tag `4ec200983`. APK `30 125 711` B, SHA-256
+`9ac97df6ffb172ddc9c6f0b5a9ee6018d72b26836b11c276983d917c279028b0`;
+Kindle ZIP `40 415 676` B, SHA-256
+`66215a29a1e89796c5d74500c6b049e6b523d51954d94921ab859a04706ee312`;
+KPM `.kpkg` `41 204 573` B, SHA-256
+`8f1747af4a80ad67664762987aabfda304b5d29b980748be28f8b60610de0e50`.
+Manifest KPM wskazuje `[2026, 28, 0]`.
+
 **KPM (2026-10-20):** osobne publiczne repo
 [`michalkulik/kpm-koreader`](https://github.com/michalkulik/kpm-koreader) z
 manifestem KPM i pakietem `koreader-mkulik` (`.kpkg`, target `kindlepw2`).
