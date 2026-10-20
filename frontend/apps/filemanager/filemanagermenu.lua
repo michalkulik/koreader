@@ -27,7 +27,7 @@ local FileManagerMenu = InputContainer:extend{
     registered_widgets = nil, -- array
 }
 
-local function getDefaultMenuButtons()
+local function getDefaultMenuButtons(menu)
     return {
         ["KOMenu:menu_buttons"] = {
             -- top menu
@@ -37,7 +37,7 @@ local function getDefaultMenuButtons()
             icon = "appbar.pageview",
             remember = false,
             callback = function()
-                self:onCloseFileManagerMenu()
+                menu:onCloseFileManagerMenu()
                 local plugin = PluginLoader:getPluginInstance("shelfsync")
                 if plugin then
                     plugin:showShelf()
@@ -53,7 +53,7 @@ local function getDefaultMenuButtons()
 end
 
 function FileManagerMenu:init()
-    self.menu_items = getDefaultMenuButtons()
+    self.menu_items = getDefaultMenuButtons(self)
 
     self.registered_widgets = {}
 
@@ -135,7 +135,7 @@ function FileManagerMenu:initGesListener()
 end
 
 function FileManagerMenu:setUpdateItemTable()
-    for k, v in pairs(getDefaultMenuButtons()) do
+    for k, v in pairs(getDefaultMenuButtons(self)) do
         self.menu_items[k] = v
     end
     local FileChooser = self.ui.file_chooser
