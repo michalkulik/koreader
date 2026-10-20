@@ -24,13 +24,14 @@ local ota_dir = DataStorage:getDataDir() .. "/ota/"
 
 local OTAManager = {
     -- NOTE: Each URL *MUST* end with a /
+    -- This fork publishes its own OTA assets on GitHub releases:
+    --   koreader-android-arm64-latest-stable  (text manifest, 1st line = APK name)
+    --   koreader-android-arm64-<version>.apk
+    --   latest.json                          (version/sha256 metadata)
+    -- GitHub redirects /releases/latest/download/<asset> to the real asset;
+    -- fetch_text_follow_redirects() below handles that.
     ota_servers = {
-        "http://ota.koreader.rocks/",
-        "https://github.com/koreader/koreader/releases/download/ota/",
-        "http://koreader-fr.ak-team.com/",
-        "http://koreader-pl.ak-team.com/",
-        "http://koreader-na.ak-team.com/",
-        "http://koreader.ak-team.com/",
+        "https://github.com/michalkulik/koreader/releases/latest/download/",
     },
     ota_channels = {
         "stable",
@@ -53,7 +54,19 @@ function OTAManager:getOTAType()
 end
 
 function OTAManager:getOTAServer()
-    return G_reader_settings:readSetting("ota_server") or self.ota_servers[1]
+    local server = G_reader_settings:readSetting("ota_server")
+    if not server or server == "" then
+        return self.ota_servers[1]
+    end
+    -- Migrate old upstream defaults to this fork's feed. Otherwise an old
+    -- saved setting would keep offering official KOReader builds.
+    if server:match("ota%.koreader%.rocks")
+        or server:match("github%.com/koreader/koreader")
+        or server:match("ak%-team%.com") then
+        server = self.ota_servers[1]
+        G_reader_settings:saveSetting("ota_server", server)
+    end
+    return server
 end
 
 function OTAManager:setOTAServer(server)
@@ -85,6 +98,52 @@ function OTAManager:getFilename(kind)
     end
 end
 
+local function fetch_text_follow_redirects(url)
+    local http = require("socket.http")
+    local ltn12 = require("ltn12")
+    local socket = require("socket")
+    local socketutil = require("socketutil")
+
+    socketutil:set_timeout()
+    local current = url
+    local data, err
+    for _ = 1, 5 do
+        local chunks = {}
+        local code, headers, status = socket.skip(1, http.request{
+            url = current,
+            sink = ltn12.sink.table(chunks),
+        })
+        if code == 200 then
+            data = table.concat(chunks)
+            break
+        elseif code == 301 or code == 302 or code == 303
+            or code == 307 or code == 308 then
+            local location = headers and headers.location
+            if not location then
+                err = status or code
+                break
+            end
+            if location:match("^https?://") then
+                current = location
+            elseif location:sub(1, 2) == "//" then
+                local scheme = current:match("^(https?:)")
+                current = scheme .. location
+            elseif location:sub(1, 1) == "/" then
+                local scheme_host = current:match("^(https?://[^/]+)")
+                current = scheme_host .. location
+            else
+                local base = current:match("^(.*/)") or current
+                current = base .. location
+            end
+        else
+            err = status or code
+            break
+        end
+    end
+    socketutil:reset_timeout()
+    return data, err
+end
+
 function OTAManager:checkUpdate()
     if Device:isDeprecated() then return -1 end
 
@@ -108,35 +167,30 @@ function OTAManager:checkUpdate()
         end
         ota_package = err
     elseif ota_type == "link" then
-        local http = require("socket.http")
-        local ltn12 = require("ltn12")
-        local socket = require("socket")
-        local socketutil = require("socketutil")
-
         local local_update_file = ota_dir .. update_file
-
-        socketutil:set_timeout()
-        local code, headers, status = socket.skip(1, http.request{
-            url     = ota_update_file,
-            sink    = ltn12.sink.file(io.open(local_update_file, "w")),
-        })
-        socketutil:reset_timeout()
-        if code ~= 200 then
-            logger.dbg("OTA check response headers:", headers)
-            return nil, status or code or "network unreachable"
+        local content, err = fetch_text_follow_redirects(ota_update_file)
+        if not content then
+            logger.dbg("OTA check failed:", ota_update_file, err)
+            return nil, err or "network unreachable"
         end
-        -- parse OTA package version
-        local update_info = io.open(local_update_file, "r")
-        if update_info then
-            local i = 0
-            for line in update_info:lines() do
-                i = i + 1
-                if i == 1 then
-                    ota_package = line
-                    link = self:getOTAServer() .. ota_package
-                end
+        local file = io.open(local_update_file, "w")
+        if file then
+            file:write(content)
+            file:close()
+        end
+        -- The first line is either the APK asset name or an absolute URL.
+        local first = content:match("^([^\r\n]+)")
+        if first then
+            first = first:gsub("^%s+", ""):gsub("%s+$", "")
+        end
+        if first and first ~= "" then
+            if first:match("^https?://") then
+                ota_package = first:match("([^/\\]+)$") or first
+                link = first
+            else
+                ota_package = first
+                link = self:getOTAServer() .. first
             end
-            update_info:close()
         end
     end
     local local_ok, local_version = pcall(function()
@@ -444,6 +498,12 @@ function OTAManager:getOTAMenuTable()
                     {
                         text = _("Update channel"),
                         sub_item_table = self:genChannelList()
+                    },
+                    {
+                        text = T(_("Source: %1"), "github.com/michalkulik/koreader"),
+                        callback = function()
+                            Device:openLink("https://github.com/michalkulik/koreader/releases")
+                        end,
                     },
                 }
             },

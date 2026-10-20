@@ -1,18 +1,22 @@
 --[[--
 ShelfSync: self-hosted shelf/library integration for koreader-server.
 
-Stage 2:
+Stage 2+3:
   * device token login,
   * local index and offline queue,
   * progress pull/push,
   * upload the current book when it is opened,
-  * basic remote shelf with download/open.
+  * remote shelf with download/open, cached for offline use,
+  * shelf status line (last sync, pending changes, errors),
+  * "Continue reading", sorting and per-book long-press actions,
+  * manual sync summary and Dispatcher actions.
 ]]
 
 local BD = require("ui/bidi")
 local ConfirmBox = require("ui/widget/confirmbox")
 local DataStorage = require("datastorage")
 local Device = require("device")
+local Dispatcher = require("dispatcher")
 local Event = require("ui/event")
 local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
@@ -57,6 +61,11 @@ function ShelfSync:init()
     self.download_dir = self.settings:readSetting("download_dir")
     self.auto_upload = self.settings:readSetting("auto_upload", true)
     self.auto_progress = self.settings:readSetting("auto_progress", true)
+    self.sort_mode = self.settings:readSetting("sort_mode", "recent")
+    self.last_sync = tonumber(self.settings:readSetting("last_sync"))
+    self.last_error = tonumber(self.settings:readSetting("last_error"))
+    self.library = self.settings:readSetting("library_cache", {})
+    self.library_time = tonumber(self.settings:readSetting("library_time")) or 0
 
     if not self.device_id then
         self.device_id = md5(tostring(os.time()) .. tostring(Device.model) .. tostring(math.random(1, 1000000)))
@@ -77,6 +86,26 @@ function ShelfSync:init()
     if self.ui and self.ui.menu then
         self.ui.menu:registerToMainMenu(self)
     end
+
+    Dispatcher:registerAction("shelfsync_sync", {
+        category = "none",
+        event = "ShelfSyncNow",
+        title = _("Synchronize shelf"),
+        general = true,
+    })
+    Dispatcher:registerAction("shelfsync_push_progress", {
+        category = "none",
+        event = "ShelfSyncPushProgress",
+        title = _("Shelf: push progress from this device"),
+        reader = true,
+    })
+    Dispatcher:registerAction("shelfsync_pull_progress", {
+        category = "none",
+        event = "ShelfSyncPullProgress",
+        title = _("Shelf: pull progress from other devices"),
+        reader = true,
+        separator = true,
+    })
 end
 
 function ShelfSync:saveSettings()
@@ -88,6 +117,7 @@ function ShelfSync:saveSettings()
     self.settings:saveSetting("download_dir", self.download_dir)
     self.settings:saveSetting("auto_upload", self.auto_upload)
     self.settings:saveSetting("auto_progress", self.auto_progress)
+    self.settings:saveSetting("sort_mode", self.sort_mode)
     self.settings:flush()
 end
 
@@ -122,6 +152,127 @@ function ShelfSync:onFlushSettings()
     if self.settings then self:saveSettings() end
     if self.queue then self.queue:save() end
     if self.index then self.index:save() end
+end
+
+-- ------------------------------------------------------------------- status
+
+function ShelfSync:relativeTime(timestamp)
+    timestamp = tonumber(timestamp)
+    if not timestamp or timestamp <= 0 then return _("never") end
+    local delta = os.time() - timestamp
+    if delta < 0 then delta = 0 end
+    if delta < 60 then return _("just now") end
+    if delta < 3600 then return T(_("%1 min ago"), math.floor(delta / 60)) end
+    if delta < 86400 then return T(_("%1 h ago"), math.floor(delta / 3600)) end
+    if delta < 7 * 86400 then return T(_("%1 days ago"), math.floor(delta / 86400)) end
+    return os.date("%Y-%m-%d %H:%M", timestamp)
+end
+
+function ShelfSync:pendingCount()
+    return self.queue and self.queue:count() or 0
+end
+
+function ShelfSync:markSyncResult(failed)
+    failed = tonumber(failed) or 0
+    if failed > 0 then
+        self.last_error = failed
+    else
+        self.last_sync = os.time()
+        self.last_error = nil
+    end
+    self.settings:saveSetting("last_sync", self.last_sync)
+    self.settings:saveSetting("last_error", self.last_error)
+    self.settings:flush()
+end
+
+function ShelfSync:shelfStatusText()
+    local status = self:formatLastSync()
+    if self.last_error and self.last_error > 0 then
+        return T(_("%1 · %2 errors"), status, self.last_error)
+    end
+    return status
+end
+
+function ShelfSync:formatLastSync()
+    if not self.last_sync then return _("never synced") end
+    return T(_("last sync %1"), self:relativeTime(self.last_sync))
+end
+
+function ShelfSync:sortBooks(books)
+    local list = {}
+    for _, book in ipairs(books or {}) do
+        if not book.deleted then table.insert(list, book) end
+    end
+    local mode = self.sort_mode or "recent"
+    if mode == "title" then
+        table.sort(list, function(a, b)
+            return (a.title or a.filename or ""):lower() < (b.title or b.filename or ""):lower()
+        end)
+    elseif mode == "author" then
+        table.sort(list, function(a, b)
+            return (a.authors or ""):lower() < (b.authors or ""):lower()
+        end)
+    elseif mode == "added" then
+        table.sort(list, function(a, b)
+            return (tonumber(a.created_at) or 0) > (tonumber(b.created_at) or 0)
+        end)
+    else
+        table.sort(list, function(a, b)
+            local ap = a.progress and tonumber(a.progress.updated_at) or 0
+            local bp = b.progress and tonumber(b.progress.updated_at) or 0
+            if ap == bp then
+                return (tonumber(a.updated_at) or 0) > (tonumber(b.updated_at) or 0)
+            end
+            return ap > bp
+        end)
+    end
+    return list
+end
+
+function ShelfSync:continueBook(books)
+    local best, best_time
+    for _, book in ipairs(books or {}) do
+        local progress = book.progress
+        local percent = progress and tonumber(progress.percentage)
+        if percent and percent > 0 and percent < 0.999 then
+            local stamp = tonumber(progress.updated_at) or 0
+            if not best or stamp > best_time then
+                best = book
+                best_time = stamp
+            end
+        end
+    end
+    return best
+end
+
+function ShelfSync:bookTitle(book)
+    local title = book.title or book.filename or book.id or _("Unknown book")
+    if book.authors and book.authors ~= "" then
+        return title .. " — " .. book.authors
+    end
+    return title
+end
+
+function ShelfSync:bookSubtitle(book, local_path)
+    local bits = {}
+    local progress = book.progress
+    if progress and tonumber(progress.percentage) then
+        table.insert(bits, T(_("%1%"), math.floor(tonumber(progress.percentage) * 100)))
+    end
+    if progress and tonumber(progress.updated_at) then
+        table.insert(bits, self:relativeTime(progress.updated_at))
+    end
+    table.insert(bits, local_path and _("on device") or _("on server"))
+    return table.concat(bits, " · ")
+end
+
+function ShelfSync:openBook(book)
+    local local_path = self.index:find_by_book_id(book.id)
+    if local_path and lfs.attributes(local_path, "mode") == "file" then
+        filemanagerutil.openFile(self.ui, local_path)
+    else
+        self:downloadBook(book)
+    end
 end
 
 -- --------------------------------------------------------------- book info
@@ -178,6 +329,9 @@ function ShelfSync:refreshLibrary()
     end
     self.library = books
     self.library_time = os.time()
+    self.settings:saveSetting("library_cache", books)
+    self.settings:saveSetting("library_time", self.library_time)
+    self.settings:flush()
     return books
 end
 
@@ -273,6 +427,33 @@ function ShelfSync:queueCurrentBook()
     })
     if added then
         self:showInfo(T(_("Shelf: queued %1 for upload."), meta.filename), 2)
+    end
+    if NetworkMgr:isOnline() then
+        self:flushQueue(false)
+    end
+end
+
+function ShelfSync:queueUploadPath(book, path)
+    if not path or lfs.attributes(path, "mode") ~= "file" then return end
+    local entry = self.index:get(path)
+    if entry and entry.uploaded then
+        self:showInfo(_("This book is already on the shelf."), 2)
+        return
+    end
+    local size = lfs.attributes(path, "size")
+    local added = self.queue:add({
+        kind = "upload",
+        path = path,
+        partial_md5 = book.partial_md5,
+        size = size,
+        filename = book.filename or path:match("([^/\\]+)$"),
+        title = book.title,
+        authors = book.authors,
+        series = book.series,
+        language = book.language,
+    })
+    if added then
+        self:showInfo(T(_("Shelf: queued %1 for upload."), book.filename or path), 2)
     end
     if NetworkMgr:isOnline() then
         self:flushQueue(false)
@@ -400,15 +581,15 @@ function ShelfSync:pushProgress(interactive)
 end
 
 function ShelfSync:pullProgress(interactive)
-    if not self:isLoggedIn() then return end
+    if not self:isLoggedIn() then return nil end
     if not NetworkMgr:isOnline() then
         if interactive then
             NetworkMgr:willRerunWhenOnline(function() self:pullProgress(true) end)
         end
-        return
+        return nil
     end
     local meta = self:currentBook()
-    if not meta then return end
+    if not meta then return nil end
 
     local book = self:findBookByMD5(meta.partial_md5)
     if not book then
@@ -416,11 +597,11 @@ function ShelfSync:pullProgress(interactive)
         book = self:findBookByMD5(meta.partial_md5)
     end
     if not book or not book.progress or not book.progress.rev or book.progress.rev == 0 then
-        return
+        return nil
     end
     local entry = self.index:get(meta.file) or {}
     if (entry.last_rev or 0) >= book.progress.rev then
-        return
+        return nil
     end
 
     local current_position, current_percentage = self:currentPosition()
@@ -434,7 +615,7 @@ function ShelfSync:pullProgress(interactive)
             last_rev = book.progress.rev,
         })
         if interactive then self:showInfo(_("Progress is already up to date.")) end
-        return
+        return "same"
     end
 
     local function apply()
@@ -451,6 +632,7 @@ function ShelfSync:pullProgress(interactive)
 
     if interactive then
         apply()
+        return true
     else
         UIManager:show(ConfirmBox:new{
             text = T(_("Sync to position %1% from another device?"),
@@ -461,19 +643,20 @@ function ShelfSync:pullProgress(interactive)
                 self.index:update(meta.file, { last_rev = book.progress.rev })
             end,
         })
+        return "asked"
     end
 end
 
 -- -------------------------------------------------------------------- queue
 
 function ShelfSync:flushQueue(interactive)
-    if not self:isLoggedIn() then return end
-    if self.flushing then return end
+    if not self:isLoggedIn() then return 0, 0, 0 end
+    if self.flushing then return 0, 0, 0 end
     if not NetworkMgr:isOnline() then
         if interactive then
             NetworkMgr:willRerunWhenOnline(function() self:flushQueue(true) end)
         end
-        return
+        return 0, 0, 0
     end
     self.flushing = true
     local items = {}
@@ -510,9 +693,13 @@ function ShelfSync:flushQueue(interactive)
     if sent > 0 then
         self:refreshLibrary()
     end
+    if sent > 0 and failed == 0 then
+        self:markSyncResult(0)
+    end
     if interactive then
         self:showInfo(T(_("Shelf sync: %1 sent, %2 failed."), sent, failed), 5)
     end
+    return sent, failed, uploads
 end
 
 function ShelfSync:syncNow()
@@ -524,9 +711,17 @@ function ShelfSync:syncNow()
         NetworkMgr:willRerunWhenOnline(function() self:syncNow() end)
         return
     end
-    self:flushQueue(true)
-    self:pullProgress(true)
-    self:refreshLibrary()
+    local sent, failed, uploads = self:flushQueue(false)
+    sent, failed, uploads = sent or 0, failed or 0, uploads or 0
+    local pulled = self:pullProgress(true)
+    local books = self:refreshLibrary()
+    self:markSyncResult(failed)
+    self:showInfo(T(_("Shelf sync complete.\nUploads: %1 · Progress: %2 · Books: %3\nPending: %4 · Errors: %5"),
+        uploads,
+        pulled and 1 or 0,
+        books and #books or 0,
+        self:pendingCount(),
+        failed), 6)
 end
 
 -- --------------------------------------------------------------------- shelf
@@ -536,46 +731,135 @@ function ShelfSync:showShelf()
         self:showLoginDialog()
         return
     end
-    if not NetworkMgr:isOnline() then
-        NetworkMgr:willRerunWhenOnline(function() self:showShelf() end)
-        return
+
+    local online = NetworkMgr:isOnline()
+    local books = self.library
+    if online then
+        local fetched = self:refreshLibrary()
+        if fetched then books = fetched end
     end
-    local books = self:refreshLibrary()
-    if not books then return end
-    if #books == 0 then
-        self:showInfo(_("The shelf is empty."))
+    books = self:sortBooks(books)
+    if not books or #books == 0 then
+        self:showInfo(online and _("The shelf is empty.")
+            or _("Offline and no cached shelf yet."))
         return
     end
 
-    local items = {}
+    local pending = self:pendingCount()
+    local items = {
+        {
+            text = _("⟳ Synchronize now"),
+            mandatory = T(_("%1 · %2 pending"),
+                online and self:shelfStatusText() or _("offline"), pending),
+            callback = function() self:syncNow() end,
+            hold_keep_menu_open = false,
+        },
+    }
+
+    if pending > 0 then
+        table.insert(items, {
+            text = T(_("Pending changes: %1"), pending),
+            mandatory = self.last_error and T(_("%1 errors"), self.last_error) or nil,
+            callback = function() self:showQueue() end,
+        })
+    end
+
+    local continue = self:continueBook(books)
+    if continue then
+        table.insert(items, {
+            text = T(_("Continue reading: %1"),
+                continue.title or continue.filename or continue.id),
+            mandatory = T(_("%1%"),
+                math.floor((continue.progress.percentage or 0) * 100)),
+            callback = function() self:openBook(continue) end,
+            hold_keep_menu_open = false,
+        })
+    end
+
     for _, book in ipairs(books) do
-        if not book.deleted then
-            local local_path = self.index:find_by_book_id(book.id)
-            local percent = book.progress and book.progress.percentage or 0
-            local title = book.title or book.filename or book.id
-            if book.authors and book.authors ~= "" then
-                title = title .. " — " .. book.authors
-            end
-            table.insert(items, {
-                text = title,
-                mandatory = T(_("%1% · %2"), math.floor(percent * 100),
-                    local_path and _("on device") or _("on server")),
-                callback = function()
-                    if local_path and lfs.attributes(local_path, "mode") == "file" then
-                        filemanagerutil.openFile(self.ui, local_path)
-                    else
-                        self:downloadBook(book)
-                    end
-                end,
-            })
-        end
+        local local_path = self.index:find_by_book_id(book.id)
+        table.insert(items, {
+            text = self:bookTitle(book),
+            mandatory = self:bookSubtitle(book, local_path),
+            callback = function() self:openBook(book) end,
+            hold_callback = function() self:showBookActions(book) end,
+            hold_keep_menu_open = false,
+        })
     end
 
     UIManager:show(Menu:new{
-        title = _("Shelf"),
+        title = T(_("Shelf · %1"), online and self:shelfStatusText() or _("offline")),
         item_table = items,
         width = Device.screen:getWidth() * 0.9,
         title_bar_fm_style = true,
+    })
+end
+
+function ShelfSync:showBookActions(book)
+    local path = self.index:find_by_book_id(book.id)
+    local entry = path and self.index:get(path)
+    local items = {
+        {
+            text = path and _("Open") or _("Download and open"),
+            callback = function() self:openBook(book) end,
+        },
+    }
+    if path then
+        table.insert(items, {
+            text = _("Upload to shelf"),
+            enabled = not (entry and entry.uploaded),
+            callback = function() self:queueUploadPath(book, path) end,
+        })
+        if entry and entry.downloaded then
+            table.insert(items, {
+                text = _("Remove local copy"),
+                callback = function() self:removeLocalCopy(book, path) end,
+            })
+        end
+    end
+    table.insert(items, {
+        text = _("Details"),
+        callback = function() self:showBookDetails(book, path) end,
+    })
+    UIManager:show(Menu:new{
+        title = self:bookTitle(book),
+        item_table = items,
+        width = Device.screen:getWidth() * 0.9,
+        title_bar_fm_style = true,
+    })
+end
+
+function ShelfSync:removeLocalCopy(book, path)
+    UIManager:show(ConfirmBox:new{
+        text = T(_("Delete the local copy of \"%1\"?\n%2"),
+            book.title or book.filename or book.id, BD.filepath(path)),
+        ok_text = _("Delete"),
+        ok_callback = function()
+            local ok, err = os.remove(path)
+            if not ok then
+                self:showInfo(T(_("Could not delete: %1"), tostring(err)))
+                return
+            end
+            self.index:remove(path)
+            self:showInfo(_("Local copy removed."), 3)
+        end,
+    })
+end
+
+function ShelfSync:showBookDetails(book, path)
+    local progress = book.progress or {}
+    local lines = {
+        self:bookTitle(book),
+        T(_("File: %1"), book.filename or "?"),
+        T(_("Size: %1"), util.getFriendlySize(tonumber(book.size) or 0)),
+        T(_("Progress: %1%"), math.floor((tonumber(progress.percentage) or 0) * 100)),
+        T(_("Last progress update: %1"), self:relativeTime(progress.updated_at)),
+        T(_("Local file: %1"), path or _("not downloaded")),
+        T(_("Server id: %1"), book.id or "?"),
+    }
+    UIManager:show(InfoMessage:new{
+        text = table.concat(lines, "\n"),
+        timeout = 10,
     })
 end
 
@@ -615,6 +899,7 @@ function ShelfSync:downloadBook(book)
                 book_id = book.id,
                 partial_md5 = book.partial_md5,
                 uploaded = true,
+                downloaded = true,
                 size = lfs.attributes(dest, "size"),
             })
             UIManager:show(ConfirmBox:new{
@@ -870,6 +1155,47 @@ function ShelfSync:getSettingsMenuTable()
             end,
         },
         {
+            text = _("Sort shelf"),
+            sub_item_table = {
+                {
+                    text = _("Recently read"),
+                    radio = true,
+                    checked_func = function() return self.sort_mode == "recent" end,
+                    callback = function()
+                        self.sort_mode = "recent"
+                        self:saveSettings()
+                    end,
+                },
+                {
+                    text = _("Title"),
+                    radio = true,
+                    checked_func = function() return self.sort_mode == "title" end,
+                    callback = function()
+                        self.sort_mode = "title"
+                        self:saveSettings()
+                    end,
+                },
+                {
+                    text = _("Author"),
+                    radio = true,
+                    checked_func = function() return self.sort_mode == "author" end,
+                    callback = function()
+                        self.sort_mode = "author"
+                        self:saveSettings()
+                    end,
+                },
+                {
+                    text = _("Recently added"),
+                    radio = true,
+                    checked_func = function() return self.sort_mode == "added" end,
+                    callback = function()
+                        self.sort_mode = "added"
+                        self:saveSettings()
+                    end,
+                },
+            },
+        },
+        {
             text = _("Download folder"),
             callback = function() self:showDownloadDirDialog() end,
         },
@@ -880,7 +1206,13 @@ end
 
 function ShelfSync:addToMainMenu(menu_items)
     menu_items.shelfsync = {
-        text = _("Shelf sync"),
+        text_func = function()
+            local pending = self:pendingCount()
+            if pending > 0 then
+                return T(_("Shelf sync (%1 pending)"), pending)
+            end
+            return _("Shelf sync")
+        end,
         sub_item_table = {
             {
                 text = _("Shelf"),
@@ -954,6 +1286,21 @@ function ShelfSync:onResume()
     if self:isLoggedIn() and NetworkMgr:isOnline() then
         UIManager:scheduleIn(2, function() self:flushQueue(false) end)
     end
+end
+
+function ShelfSync:onShelfSyncNow()
+    self:syncNow()
+    return true
+end
+
+function ShelfSync:onShelfSyncPushProgress()
+    self:pushProgress(true)
+    return true
+end
+
+function ShelfSync:onShelfSyncPullProgress()
+    self:pullProgress(true)
+    return true
 end
 
 return ShelfSync

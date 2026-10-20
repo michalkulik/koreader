@@ -352,50 +352,64 @@ Błąd sieci nie czyści kolejki. Operacje są idempotentne (dedupe po `partial_
 
 ## 9. Aktualizacje aplikacji — źródło: fork na GitHubie
 
-**Ważne:** obecny `v2026.10` ma OTA włączone (flavor `rocks`, `IN_APP_UPDATES=true`), ale domyślny serwer w `frontend/ui/otamanager.lua` to nadal upstream:
+**Stan:** zaimplementowane w `v2026.14`. `frontend/ui/otamanager.lua` nie ma już
+serwerów upstream — `ota_servers[1]` wskazuje na wydania forka:
 
 ```lua
 ota_servers = {
-    "http://ota.koreader.rocks/",
-    "https://github.com/koreader/koreader/releases/download/ota/",
-    ...
+    "https://github.com/michalkulik/koreader/releases/latest/download/",
 }
 ```
 
-Na Androidzie `Device:otaModel()` zwraca `android-arm64` + typ `link`: pobierany jest `koreader-android-arm64-latest-stable` (pierwsza linia = nazwa APK), potem APK i `android.ota.install()`. Efekt: „Update” proponuje oficjalny KOReader i nadpisuje fork.
+Na Androidzie `Device:otaModel()` zwraca `android-arm64` + typ `link`: pobierany
+jest `koreader-android-arm64-latest-stable` (pierwsza linia = nazwa APK), potem
+APK i `android.ota.install()`. GitHub odpowiada na `/releases/latest/download/<plik>`
+przekierowaniem 302, więc `OTAManager` dostał funkcję
+`fetch_text_follow_redirects()`, która podąża za 301/302/303/307/308 (LuaSocket
+sam tego nie robi). Manifest może też zawierać pełny URL zamiast nazwy pliku.
 
-### Rekomendowane rozwiązanie
+### Co zawiera wydanie
 
-1. Dodawać do każdego wydania `latest.json`:
+Do każdego wydania Android dołączane są trzy assety:
+
+1. `koreader-android-arm64-vYYYY.MM.apk` — podpisany APK,
+2. `koreader-android-arm64-latest-stable` — manifest dla wbudowanego OTA
+   (pierwsza linia = nazwa APK z punktu 1),
+3. `latest.json` — metadane dla przyszłych klientów:
 
 ```json
 {
-  "version": "v2026.11",
-  "versionCode": 122122,
-  "url": "https://github.com/michalkulik/koreader/releases/download/v2026.11/koreader-android-arm64-v2026.11.apk",
+  "version": "v2026.14",
+  "versionCode": 202614000000,
+  "url": "https://github.com/michalkulik/koreader/releases/download/v2026.14/koreader-android-arm64-v2026.14.apk",
   "sha256": "…",
-  "size": 30236303,
-  "abi": "arm64-v8a"
+  "size": 30154383,
+  "abi": "arm64-v8a",
+  "filename": "koreader-android-arm64-v2026.14.apk"
 }
 ```
 
-2. W aplikacji sprawdzać `https://github.com/michalkulik/koreader/releases/latest/download/latest.json`:
-   - porównaj `versionCode`,
-   - pobierz APK przez `android.download()`,
-   - zweryfikuj SHA-256,
-   - zainstaluj `android.ota.install()`.
+Assety generuje `tools/make-ota-assets.py`:
 
-   Trzeba obsłużyć redirect GitHuba (LuaSocket sam nie podąża za 301) albo użyć `httpclient`.
+```sh
+tools/make-ota-assets.py --apk koreader-android-arm64-v2026.14.apk \
+    --version v2026.14 --out /tmp/opencode/ota-assets
+```
 
-3. Alternatywa minimalna: zmienić `ota_servers[1]` na własny feed (`https://ota.mkulik.eu/koreader/` lub tag `ota` w forku) i publikować:
-   - `koreader-android-arm64-latest-stable`,
-   - APK.
+i dołącza `tools/release-android.sh` (albo ręcznie `gh release upload --clobber`).
 
-4. Kindle: KOReader używa `kotasync` i modelu `kindlepw2`. Dla aktualizacji z forka trzeba publikować `koreader-kindlepw2-latest-stable.kotasync` + `update.tar.xz`; inaczej ręczne kopiowanie.
+### Ograniczenia
 
-5. W `getOTAMenuTable()` dodać wpis „Źródło: github.com/michalkulik/koreader” (link przez `Device:openLink`).
-
-6. Każda aktualizacja podpisana tym samym kluczem `koreader-release.jks` (PackageInstaller odrzuci inny podpis). Klucz i `credentials.txt` w backupie.
+- Wbudowany OTA weryfikuje tylko **podpis APK** (PackageInstaller). `latest.json`
+  zawiera `sha256`, ale obecny przepływ `link` go nie sprawdza — pełna weryfikacja
+  sumy kontrolnej to przyszły krok.
+- Wpisy „Update server” pokazują teraz wyłącznie feed forka; stary zapisany serwer
+  upstream jest migrowany automatycznie w `getOTAServer()`.
+- Kindle: KOReader używa `kotasync` i modelu `kindlepw2`. Dla aktualizacji
+  z forka trzeba publikować `koreader-kindlepw2-latest-stable.kotasync` +
+  `update.tar.xz`; inaczej ręczne kopiowanie (etap 6/7 dla Kindle).
+- Każda aktualizacja podpisana tym samym kluczem `koreader-release.jks`
+  (PackageInstaller odrzuci inny podpis). Klucz i `credentials.txt` w backupie.
 
 ---
 
@@ -403,11 +417,11 @@ Na Androidzie `Device:otaModel()` zwraca `android-arm64` + typ `link`: pobierany
 
 1. **Serwer v1** — auth, biblioteka, upload/download, postęp, kosync-compat, Docker + testy. ✅ **ukończony 2026-10-20** (szczegóły w §12).
 2. **Plugin v1** — kolejka, indeks, sync postępu, upload przy otwarciu, download z półki. 🚧 **w toku (2026-10-20)** — kod w §12, etap 2.
-3. **UI półki** — lista, okładki, „Czytaj dalej”, status offline, ręczny sync.
+3. **UI półki** — lista, „Czytaj dalej”, status offline, sortowanie, long-press, ręczny sync. ✅ **ukończony 2026-10-20** (okładki odłożone do etapu serwerowego – patrz §12).
 4. **Ustawienia** — profil ustawień na koncie: UI/czytnik/gesty, podgląd różnic, backup, rollback, czcionki własne.
 5. **Kolekcje** — dwukierunkowa synchronizacja z `collection.lua`.
 6. **Kindle tuning** — Wi-Fi, streaming, limity, testy na KindleBasic4.
-7. **OTA** — `latest.json` / feed na forku + wpis „Źródło aktualizacji”.
+7. **OTA** — feed na forku, manifest + `latest.json`, wpis „Źródło aktualizacji”. ✅ **Android/`link` ukończony 2026-10-20**; `kotasync` dla Kindle do etapu 6.
 
 ---
 
@@ -512,13 +526,49 @@ się, ale nie rejestrowała się w menu. Dodane w `ShelfSync:init()`. `SHA-256` 
 Zweryfikowane na KOReader Linux (`v2026.07.1`): `addToMainMenu` jest wołane,
 a `menu_items.shelfsync` istnieje w menedżerze plików.
 
-**Ograniczenia etapu 2:**
-- transfery plików są synchroniczne (LuaSocket) z dialogiem postępu — jak w
-  cloud storage; na dużych plikach UI może zamarznąć na czas transferu,
-- brak okładek, sortowania i wyszukiwania na półce (etap 3),
-- brak synchronizacji ustawień i kolekcji (etapy 4–5),
-- wtyczka nie była jeszcze testowana na fizycznym Kindle 10 i Androidzie.
+### Etap 3 — UI półki i OTA (2026-10-20) ✅
 
-**Następny krok:** zainstalować `v2026.11` na Kindle 10 i Androidzie,
-przetestować login/upload/download/postęp, poprawić błędy, potem etap 3 (UI półki).
+**Kod:** `plugins/shelfsync.koplugin/main.lua`, `frontend/ui/otamanager.lua`,
+`tools/make-ota-assets.py`, `tools/release-android.sh`.
+
+**UI półki:**
+- nagłówek z ostatnim udanym sync-em i statusem offline,
+- pozycja **⟳ Synchronize now** z liczbą oczekujących zmian i błędów,
+- **Pending changes** otwierające kolejkę (ponowienie, liczba prób),
+- **Continue reading** — książka z najświeższym postępem 0–100%,
+- sortowanie półki: ostatnio czytane / tytuł / autor / ostatnio dodane
+  (zapisywane w ustawieniach),
+- long-press na książce: otwórz/pobierz, wyślij na półkę, usuń kopię lokalną,
+  szczegóły,
+- półka działa offline z trwałego cache (`library_cache` w settings),
+- raport po ręcznym syncu: uploady, postęp, liczba książek, oczekujące, błędy,
+- akcje Dispatcher: `shelfsync_sync`, `shelfsync_push_progress`,
+  `shelfsync_pull_progress` (do gestów).
+
+**OTA:**
+- `ota_servers` wskazuje wyłącznie na wydania forka; stare wpisy upstream są
+  migrowane w `getOTAServer()`,
+- obsługa przekierowań 30x przy pobieraniu manifestu,
+- manifest może zawierać nazwę pliku albo pełny URL,
+- `tools/make-ota-assets.py` generuje manifest i `latest.json`,
+- `tools/release-android.sh` publikuje APK + oba pliki OTA w wydaniu GitHub,
+- menu: **Update → Settings → Source: github.com/michalkulik/koreader**.
+
+**Testy:** wtyczka ładowana na KOReader Linux w trybie headless; `showShelf`,
+`showBookActions`, `showBookDetails` i `showQueue` budują się bez błędów na
+przykładowej bibliotece (log `DIAG shelf …`). Logika przekierowań OTA
+przetestowana lokalnym serwerem 302 (przekierowanie względne, bezwzględne i 404).
+
+**Ograniczenia etapu 3:**
+- brak okładek na liście — serwerowy `GET /api/v1/books/{id}/cover` nadal
+  zwraca 404; potrzebne wyciąganie okładki z EPUB/PDF i miniatur w kliencie,
+- transfery plików nadal synchroniczne (LuaSocket),
+- brak wyszukiwania na półce,
+- brak potwierdzenia `sha256` z `latest.json` przy aktualizacji,
+- brak synchronizacji ustawień i kolekcji (etapy 4–5),
+- wtyczka nie była jeszcze testowana na fizycznym Kindle 10.
+
+**Następny krok:** zainstalować `v2026.14` na Androidzie i Kindle 10,
+sprawdzić wbudowane **Update** (powinno pobrać wydanie z forka), potem etap 4
+(synchronizacja ustawień) albo okładki półki.
 
