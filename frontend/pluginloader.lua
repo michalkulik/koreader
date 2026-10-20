@@ -24,6 +24,7 @@ local _ = require("gettext")
 local DEFAULT_PLUGIN_PATH = "plugins"
 
 local BUILTIN_PLUGINS = {
+    ["androidkeyboard"] = true,
     ["archiveviewer"] = true,
     ["autodim"] = true,
     ["autostandby"] = true,
@@ -33,7 +34,6 @@ local BUILTIN_PLUGINS = {
     ["batterystat"] = true,
     ["bookshortcuts"] = true,
     ["calibre"] = true,
-    ["cloudstorage"] = true,
     ["coverbrowser"] = true,
     ["coverimage"] = true,
     ["docsettingtweak"] = true,
@@ -45,13 +45,10 @@ local BUILTIN_PLUGINS = {
     ["httpinspector"] = true,
     ["japanese"] = true,
     ["keepalive"] = true,
-    ["kosync"] = true,
     ["movetoarchive"] = true,
-    ["newsdownloader"] = true,
     ["opds"] = true,
     ["perceptionexpander"] = true,
     ["profiles"] = true,
-    ["qrclipboard"] = true,
     ["readtimer"] = true,
     ["shelfsync"] = true,
     ["SSH"] = true,
@@ -61,7 +58,6 @@ local BUILTIN_PLUGINS = {
     ["texteditor"] = true,
     ["timesync"] = true,
     ["vocabbuilder"] = true,
-    ["wallabag"] = true,
 }
 
 local DEPRECATION_MESSAGES = {

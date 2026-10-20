@@ -1,6 +1,7 @@
 local CheckButton = require("ui/widget/checkbutton")
 local CheckMark = require("ui/widget/checkmark")
 local Device = require("device")
+local Event = require("ui/event")
 local FFIUtil = require("ffi/util")
 local Font = require("ui/font")
 local InfoMessage = require("ui/widget/infomessage")
@@ -253,6 +254,20 @@ if Device:hasKeyboard() or Device:hasScreenKB() then
                 })
             end
         end,
+    })
+end
+if Device:isAndroid() then
+    table.insert(sub_item_table, 1, {
+        text = _("Use Android system keyboard"),
+        help_text = _([[Use the system keyboard (Gboard, Samsung Keyboard, SwiftKey, etc.) instead of KOReader's built-in virtual keyboard. This is experimental: basic typing, autocorrect and backspace work, but advanced IME selection actions may vary by keyboard.]]),
+        checked_func = function()
+            return G_reader_settings:isTrue("android_system_keyboard_enabled")
+        end,
+        callback = function()
+            G_reader_settings:flipNilOrFalse("android_system_keyboard_enabled")
+            UIManager:broadcastEvent(Event:new("AndroidSystemKeyboardChanged"))
+        end,
+        separator = true,
     })
 end
 if Device:isTouchDevice() then
