@@ -762,6 +762,18 @@ KPM `.kpkg` `41 204 907` B, SHA-256
 `2406534403020b864d35d3c82871271dd9863c6e6063c2438966012cebcecb84`.
 Manifest KPM wskazuje `[2026, 31, 0]`.
 
+**Poprawka v2026.32:** [`v2026.32`](https://github.com/michalkulik/koreader/releases/tag/v2026.32)
+— powrót do standardowego paska tytułu półki; prawy przycisk (domyślnie
+zamykanie) jest zamieniany na lupkę wyszukiwania. Usunięto własny `TitleBar`,
+który powodował crash przy automatycznym starcie półki na części urządzeń.
+Tag `5e063587c`. APK `30 121 615` B, SHA-256
+`042208b6d4627b38fad3ae9c4b2b0d31cb801689f3b2b64005cab588e819ee4f`;
+Kindle ZIP `40 416 243` B, SHA-256
+`20ce943332fc379c965602accf00e4a90444aba87be6e4cbc7f0c83fae4c8282`;
+KPM `.kpkg` `41 207 367` B, SHA-256
+`6e0bb83cc565748934bb65340afc1e388c913c852558b8335b8e81d91060fdc0`.
+Manifest KPM wskazuje `[2026, 32, 0]`.
+
 **KPM (2026-10-20):** osobne publiczne repo
 [`michalkulik/kpm-koreader`](https://github.com/michalkulik/kpm-koreader) z
 manifestem KPM i pakietem `koreader-mkulik` (`.kpkg`, target `kindlepw2`).
