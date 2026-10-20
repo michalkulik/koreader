@@ -364,13 +364,13 @@ end
 function ShelfSync:filterBooks(books)
     local query = self.search_query
     if not query or query == "" then return books end
-    local needle = query:lower()
+    local needle = util.stringLower(query)
     local filtered = {}
     for _, book in ipairs(books or {}) do
-        local title = tostring(book.title or book.filename or ""):lower()
+        local title = util.stringLower(tostring(book.title or book.filename or ""))
         local authors = book.authors
         if type(authors) == "table" then authors = table.concat(authors, ", ") end
-        authors = tostring(authors or ""):lower()
+        authors = util.stringLower(tostring(authors or ""))
         if title:find(needle, 1, true) or authors:find(needle, 1, true) then
             table.insert(filtered, book)
         end
