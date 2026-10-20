@@ -807,14 +807,8 @@ function ShelfSync:bookProgressLabel(book)
     return T(_("%1%"), math.floor(self:bookProgress(book) * 100))
 end
 
-function ShelfSync:coverSubtitle(book)
-    -- Keep the percentage first so it stays visible even when a long author
-    -- name is truncated at the tile width.
-    local bits = { self:bookProgressLabel(book) }
-    if book.authors and book.authors ~= "" then
-        table.insert(bits, book.authors)
-    end
-    return table.concat(bits, " · ")
+function ShelfSync:coverAuthor(book)
+    return book.authors or ""
 end
 
 function ShelfSync:downloadMissingCovers(menu, books)
@@ -1093,9 +1087,10 @@ function ShelfSync:showShelf()
             table.insert(items, {
                 book = book,
                 title = self:coverTitle(book),
-                subtitle = self:coverSubtitle(book),
-                cover_path = self:coverPath(book),
+                author = self:coverAuthor(book),
                 progress = self:bookProgress(book),
+                progress_text = self:bookProgressLabel(book),
+                cover_path = self:coverPath(book),
             })
         end
         menu = CoverMenu:new{

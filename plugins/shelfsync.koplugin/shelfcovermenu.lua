@@ -92,10 +92,16 @@ function CoverTile:init()
         bold = true,
         max_width = self.width,
     }
-    local subtitle = TextWidget:new{
-        text = self.subtitle or "",
-        face = Font:getFace("infont", Screen:scaleBySize(13)),
-        fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+    -- Author uses the same typeface as the title, only smaller.
+    local author = TextWidget:new{
+        text = self.author or "",
+        face = Font:getFace("cfont", Screen:scaleBySize(12)),
+        max_width = self.width,
+    }
+    local progress_text = TextWidget:new{
+        text = self.progress_text or "",
+        face = Font:getFace("cfont", Screen:scaleBySize(12)),
+        bold = true,
         max_width = self.width,
     }
     local progress = ProgressWidget:new{
@@ -123,7 +129,8 @@ function CoverTile:init()
             progress,
             VerticalSpan:new{ width = Screen:scaleBySize(2) },
             title,
-            subtitle,
+            author,
+            progress_text,
         },
     }
 end
@@ -178,7 +185,7 @@ function CoverMenu:_recalculateDimen()
     self.cover_w = self.item_width
     self.cover_h = math.floor(self.item_width * 1.35)
     self.progress_h = Screen:scaleBySize(8)
-    self.text_height = Screen:scaleBySize(46)
+    self.text_height = Screen:scaleBySize(60)
     self.item_height = self.cover_h + self.progress_h
         + self.text_height + Screen:scaleBySize(8)
 
@@ -237,7 +244,8 @@ function CoverMenu:_updateItemsBuildUI()
             entry = entry,
             menu = self,
             title = entry.title,
-            subtitle = entry.subtitle,
+            author = entry.author,
+            progress_text = entry.progress_text,
             cover_path = entry.cover_path,
             progress = entry.progress,
             width = self.item_width,
