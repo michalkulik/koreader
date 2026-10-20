@@ -1567,12 +1567,19 @@ end
 function ShelfSync:onReaderReady()
     if not self:isLoggedIn() then return end
     self.page_counter = 0
-    if self.auto_progress then
-        UIManager:nextTick(function() self:pullProgress(false) end)
-    end
-    if self.auto_upload then
-        UIManager:scheduleIn(3, function() self:queueCurrentBook() end)
-    end
+    -- Run upload first, then pull. This matters for books opened from an
+    -- Android file manager: a brand-new book has no server entry yet, so
+    -- pulling before creating it would find nothing. One second still lets
+    -- the reader paint its first page before the (possibly large) upload.
+    UIManager:scheduleIn(1, function()
+        if not self.ui or not self.ui.document then return end
+        if self.auto_upload then
+            self:queueCurrentBook()
+        end
+        if self.auto_progress then
+            self:pullProgress(false)
+        end
+    end)
 end
 
 function ShelfSync:onPageUpdate(page)
