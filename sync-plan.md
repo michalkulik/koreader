@@ -720,7 +720,7 @@ IME Androida przez wbudowaną wtyczkę `androidkeyboard`, domyślnie wyłączon�
 implementacja oparta na KOBoard). Usunięto wtyczki: **Progress sync**
 (`kosync`), **Cloud storage**, **Wallabag**, **News downloader** oraz
 **QR from clipboard**. Tag `4ec200983`. APK `30 125 711` B, SHA-256
-`9ac97df6ffb172ddc9c6f0b5a9ee6018d72b26836b11c276983d917c279028b0`;
+`2b2492fe829889257ef65241afb48c211426af109e4d1fbae4f9bcbbad4e3b5e`;
 Kindle ZIP `40 415 676` B, SHA-256
 `66215a29a1e89796c5d74500c6b049e6b523d51954d94921ab859a04706ee312`;
 KPM `.kpkg` `41 204 573` B, SHA-256

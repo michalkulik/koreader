@@ -1,5 +1,8 @@
-# Use the git commit count as the (integer) Android version code
-ANDROID_VERSION ?= $(shell git rev-list --count HEAD)
+# Derive a stable, monotonically increasing Android version code from the
+# release version (YYYYMM[P]00) instead of the git commit count.  A shallow
+# clone or a history rewrite can make the commit count go backwards, which
+# makes Android reject the APK as a downgrade.
+ANDROID_VERSION ?= $(shell echo '$(VERSION)' | sed -e 's/^v//' -e 's/\.//g' -e 's/$$/00/')
 ANDROID_NAME ?= $(VERSION)
 ANDROID_APK = koreader-android-$(ANDROID_ARCH)$(KODEDUG_SUFFIX)-$(ANDROID_NAME).apk
 
