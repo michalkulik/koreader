@@ -120,6 +120,7 @@ function ShelfSync:init()
     self.library = sanitize_for_storage(self.settings:readSetting("library_cache", {}))
     self.library_time = tonumber(self.settings:readSetting("library_time")) or 0
     self.last_opened = sanitize_for_storage(self.settings:readSetting("last_opened", {}))
+    self.search_query = nil
 
     if not self.device_id then
         self.device_id = md5(tostring(os.time()) .. tostring(Device.model) .. tostring(math.random(1, 1000000)))
@@ -358,6 +359,62 @@ function ShelfSync:continueBook(books)
         end
     end
     return best
+end
+
+function ShelfSync:filterBooks(books)
+    local query = self.search_query
+    if not query or query == "" then return books end
+    local needle = query:lower()
+    local filtered = {}
+    for _, book in ipairs(books or {}) do
+        local title = tostring(book.title or book.filename or ""):lower()
+        local authors = book.authors
+        if type(authors) == "table" then authors = table.concat(authors, ", ") end
+        authors = tostring(authors or ""):lower()
+        if title:find(needle, 1, true) or authors:find(needle, 1, true) then
+            table.insert(filtered, book)
+        end
+    end
+    return filtered
+end
+
+function ShelfSync:showShelfSearch(books)
+    local dialog
+    dialog = InputDialog:new{
+        title = _("Search shelf"),
+        input = self.search_query or "",
+        input_hint = _("Title or author"),
+        buttons = {
+            {
+                {
+                    text = _("Cancel"),
+                    id = "close",
+                    callback = function() UIManager:close(dialog) end,
+                },
+                {
+                    text = _("Clear"),
+                    enabled = self.search_query and self.search_query ~= "" or false,
+                    callback = function()
+                        UIManager:close(dialog)
+                        self.search_query = nil
+                        self:showShelf()
+                    end,
+                },
+                {
+                    text = _("Search"),
+                    is_enter_default = true,
+                    callback = function()
+                        local query = dialog:getInputText()
+                        UIManager:close(dialog)
+                        self.search_query = query ~= "" and query or nil
+                        self:showShelf()
+                    end,
+                },
+            },
+        },
+    }
+    UIManager:show(dialog)
+    dialog:onShowKeyboard()
 end
 
 function ShelfSync:bookTitle(book)
@@ -1120,6 +1177,16 @@ function ShelfSync:showShelfActions(shelf_menu, books)
             end,
         })
     end
+    if self.search_query and self.search_query ~= "" then
+        table.insert(items, {
+            text = T(_("Clear search: %1"), self.search_query),
+            callback = function()
+                close_actions()
+                self.search_query = nil
+                self:showShelf()
+            end,
+        })
+    end
     local continue = self:continueBook(books)
     if continue then
         table.insert(items, {
@@ -1142,6 +1209,34 @@ function ShelfSync:showShelfActions(shelf_menu, books)
     UIManager:show(actions_menu)
 end
 
+function ShelfSync:newShelfTitleBar(title, subtitle, get_menu, all_books)
+    return TitleBar:new{
+        width = Device.screen:getWidth(),
+        fullscreen = true,
+        align = "center",
+        title = title,
+        subtitle = subtitle,
+        title_top_padding = Device.screen:scaleBySize(6),
+        button_padding = Device.screen:scaleBySize(5),
+        left_icon = "appbar.menu",
+        left_icon_size_ratio = 1,
+        left_icon_tap_callback = function()
+            self:showShelfActions(get_menu(), all_books)
+        end,
+        right_icon = "appbar.search",
+        right_icon_size_ratio = 1,
+        right_icon_tap_callback = function()
+            self:showShelfSearch(all_books)
+        end,
+        right_icon_hold_callback = function()
+            if self.search_query then
+                self.search_query = nil
+                self:showShelf()
+            end
+        end,
+    }
+end
+
 function ShelfSync:showShelf()
     if not self:isLoggedIn() then
         self:showLoginDialog(function() self:showShelf() end)
@@ -1154,17 +1249,30 @@ function ShelfSync:showShelf()
         local fetched = self:refreshLibrary()
         if fetched then books = fetched end
     end
-    books = self:sortBooks(books)
-    if not books or #books == 0 then
+    local all_books = self:sortBooks(books)
+    if not all_books or #all_books == 0 then
         self:showInfo(online and _("The shelf is empty.")
             or _("Offline and no cached shelf yet."))
         return
     end
 
+    local query = self.search_query
+    local books = self:filterBooks(all_books)
+    if query and query ~= "" and #books == 0 then
+        self:showInfo(T(_("No books match '%1'."), query))
+        return
+    end
+
     local pending = self:pendingCount()
     local title = T(_("Shelf · %1"), online and self:shelfStatusText() or _("offline"))
-    local subtitle = T(_("%1 books · %2 pending"), #books, pending)
+    local subtitle
+    if query and query ~= "" then
+        subtitle = T(_("%1 matches for '%2' · %3 pending"), #books, query, pending)
+    else
+        subtitle = T(_("%1 books · %2 pending"), #books, pending)
+    end
     local menu
+    local title_bar = self:newShelfTitleBar(title, subtitle, function() return menu end, all_books)
 
     if self.view_mode == "list" then
         local items = {}
@@ -1177,14 +1285,11 @@ function ShelfSync:showShelf()
             })
         end
         menu = CoverMenu.ListMenu:new{
-            title = title,
-            subtitle = subtitle,
+            custom_title_bar = title_bar,
             item_table = items,
             width = Device.screen:getWidth(),
             height = Device.screen:getHeight(),
             title_bar_fm_style = true,
-            title_bar_left_icon = "appbar.menu",
-            on_left_button_tap = function() self:showShelfActions(menu, books) end,
         }
     else
         local items = {}
@@ -1199,18 +1304,16 @@ function ShelfSync:showShelf()
             })
         end
         menu = CoverMenu:new{
-            title = title,
-            subtitle = subtitle,
+            custom_title_bar = title_bar,
             item_table = items,
             width = Device.screen:getWidth(),
             height = Device.screen:getHeight(),
             title_bar_fm_style = true,
-            title_bar_left_icon = "appbar.menu",
-            on_left_button_tap = function() self:showShelfActions(menu, books) end,
             on_book_tap = function(entry) self:openBook(entry.book) end,
             on_book_hold = function(entry) self:showBookActions(entry.book) end,
         }
     end
+    title_bar.show_parent = menu
 
     if self.shelf_menu and self.shelf_menu ~= menu then
         UIManager:close(self.shelf_menu)
