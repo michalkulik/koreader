@@ -576,7 +576,7 @@ zalogowana i widzi książki offline.
 
 ### Etap 3.5 — okładki, widok startowy i pakiet Kindle (2026-10-20) ✅
 
-**Kod:** `plugins/shelfsync.koplugin/covermenu.lua`,
+**Kod:** `plugins/shelfsync.koplugin/shelfcovermenu.lua`,
 `plugins/shelfsync.koplugin/main.lua`, `plugins/shelfsync.koplugin/client.lua`,
 `reader.lua`, `frontend/apps/filemanager/filemanagermenu.lua`;
 serwer: `koreader-server/app/covers.py`, `app/main.py`, testy.
@@ -615,7 +615,7 @@ serwer: `koreader-server/app/covers.py`, `app/main.py`, testy.
   `test/leaves.epub` (JPEG 220 130 B),
 - żywy serwer: `GET /api/v1/books/74aa…/cover` zwraca JPEG 570×900,
 - składnia Lua sprawdzona dla wszystkich zmienionych plików,
-- APK zawiera `shelfsync.koplugin/covermenu.lua`; ZIP Kindle również.
+- APK zawiera `shelfsync.koplugin/shelfcovermenu.lua`; ZIP Kindle również.
 
 **Wydanie:** [`v2026.17`](https://github.com/michalkulik/koreader/releases/tag/v2026.17)
 — APK arm64 `30 264 975` B, SHA-256

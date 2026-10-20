@@ -229,6 +229,7 @@ local order = {
     },
     filemanager = {},
     main = {
+        "shelf",
         "history",
         "open_previous_document",
         "----------------------------",

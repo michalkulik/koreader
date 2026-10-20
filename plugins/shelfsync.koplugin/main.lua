@@ -36,7 +36,10 @@ local _ = require("gettext")
 local T = require("ffi/util").template
 
 local Client = require("client")
-local CoverMenu = require("covermenu")
+-- Must not be called "covermenu": the bundled CoverBrowser plugin also has a
+-- module with that generic name, and whichever plugin requires it first would
+-- poison package.loaded for the other one.
+local CoverMenu = require("shelfcovermenu")
 local FileChooser = require("ui/widget/filechooser")
 local Index = require("index")
 local Queue = require("queue")
