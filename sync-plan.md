@@ -504,6 +504,14 @@ plugin zewnętrzny), log inicjalizacji. `SHA-256` APK:
 `8d4e944704ace4ac816506149501951fb54894ca4c069a60346c98319908b37f`.
 Wpis w menu: **Narzędzia → Shelf sync**.
 
+**Poprawka v2026.13:** [`v2026.13`](https://github.com/michalkulik/koreader/releases/tag/v2026.13)
+— właściwa przyczyna braku wpisu: KOReader wywołuje `addToMainMenu()` tylko dla
+widgetów zarejestrowanych przez `menu:registerToMainMenu(self)`. Wtyczka ładowała
+się, ale nie rejestrowała się w menu. Dodane w `ShelfSync:init()`. `SHA-256` APK:
+`4845b5cf76b33d4082458c8bdc281323473de391dea5cf189cb8ac4b6fc8cd14`.
+Zweryfikowane na KOReader Linux (`v2026.07.1`): `addToMainMenu` jest wołane,
+a `menu_items.shelfsync` istnieje w menedżerze plików.
+
 **Ograniczenia etapu 2:**
 - transfery plików są synchroniczne (LuaSocket) z dialogiem postępu — jak w
   cloud storage; na dużych plikach UI może zamarznąć na czas transferu,
