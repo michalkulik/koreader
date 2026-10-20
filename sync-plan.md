@@ -672,6 +672,15 @@ zamykana przed otwarciem pickera, a stub UI ma komplet metod
 Kindle ZIP `40 814 955` B, SHA-256
 `b916144a41f11cc01aea9948a1ff234192044427157bd5bdbdde2512b47d91e5`.
 
+**Poprawka v2026.24:** [`v2026.24`](https://github.com/michalkulik/koreader/releases/tag/v2026.24)
+— szybkie przewracanie stron nie blokuje się już na synchronizacji. Push
+postępu jest odraczany o 2 s i resetowany przy każdym kolejnym przewinięciu;
+wysyłany jest jeden request po zatrzymaniu. Zamknięcie książki i uśpienie
+anulują timer i wymuszają zapis. Tag: `bdd70bda4`. APK `30 297 743` B,
+SHA-256 `adcb3ed58ac5dfce65a81166bedac4a69a9c44fed59891b95c35fcaf545e6584`;
+Kindle ZIP `40 815 172` B, SHA-256
+`d2c59286d00c3b9e37a27c1c9e5913fbbc146ac540da913d79f4aade9e284133`.
+
 **Ograniczenia etapu 3.5:**
 - okładki PDF/MOBI/AZW3 wymagają dodatkowego renderera — na razie placeholder,
 - transfery plików i okładek nadal synchroniczne (LuaSocket),
