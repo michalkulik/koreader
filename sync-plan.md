@@ -692,6 +692,14 @@ SHA-256 `989a44c0c4031ea9468457c5b858625a553d5967f526f55c3e51a52238a72fa5`;
 Kindle ZIP `40 815 299` B, SHA-256
 `47e5fbdf47d84a092436fcab26acacc2438f3c268132a39c9edab7554beb2042`.
 
+**Poprawka v2026.26:** [`v2026.26`](https://github.com/michalkulik/koreader/releases/tag/v2026.26)
+— kafelek okładki: autor pod tytułem tym samym krojem (`cfont`, mniejszy),
+procent w osobnej linii pod autorem, pasek postępu nadal pod okładką; wyższy
+kafel mieści trzy linie na Kindle 600×800. Tag: `b4d9508af`. APK `30 301 839` B,
+SHA-256 `0cb91093ed0f66e94c721c1b857b38772434c276274afdaab0a86d94531c4bcf`;
+Kindle ZIP `40 815 262` B, SHA-256
+`4f85308f117d6d6c1e6aeff80dd138dca7035b561fbac80610e99724a1d77cb6`.
+
 **Ograniczenia etapu 3.5:**
 - okładki PDF/MOBI/AZW3 wymagają dodatkowego renderera — na razie placeholder,
 - transfery plików i okładek nadal synchroniczne (LuaSocket),
