@@ -87,6 +87,8 @@ function ShelfSync:init()
     self.auto_upload = self.settings:readSetting("auto_upload", true)
     self.auto_progress = self.settings:readSetting("auto_progress", true)
     self.sort_mode = self.settings:readSetting("sort_mode", "recent")
+    self.view_mode = self.settings:readSetting("view_mode", "grid")
+    if self.view_mode ~= "list" then self.view_mode = "grid" end
     self.last_sync = tonumber(self.settings:readSetting("last_sync"))
     self.last_error = tonumber(self.settings:readSetting("last_error"))
     self.library = sanitize_for_storage(self.settings:readSetting("library_cache", {}))
@@ -144,6 +146,7 @@ function ShelfSync:saveSettings()
     self.settings:saveSetting("auto_upload", self.auto_upload)
     self.settings:saveSetting("auto_progress", self.auto_progress)
     self.settings:saveSetting("sort_mode", self.sort_mode)
+    self.settings:saveSetting("view_mode", self.view_mode)
     self.settings:flush()
 end
 
@@ -775,18 +778,20 @@ function ShelfSync:coverTitle(book)
     return book.title or book.filename or book.id or _("Unknown book")
 end
 
+function ShelfSync:bookProgress(book)
+    return tonumber(book.progress and book.progress.percentage) or 0
+end
+
+function ShelfSync:bookProgressLabel(book)
+    return T(_("%1%"), math.floor(self:bookProgress(book) * 100))
+end
+
 function ShelfSync:coverSubtitle(book)
     local bits = {}
     if book.authors and book.authors ~= "" then
         table.insert(bits, book.authors)
     end
-    local progress = book.progress
-    if progress and tonumber(progress.percentage) then
-        table.insert(bits, T(_("%1%"), math.floor(tonumber(progress.percentage) * 100)))
-    end
-    if #bits == 0 then
-        table.insert(bits, self.index:find_by_book_id(book.id) and _("on device") or _("on server"))
-    end
+    table.insert(bits, self:bookProgressLabel(book))
     return table.concat(bits, " · ")
 end
 
@@ -848,6 +853,15 @@ function ShelfSync:showShelfActions(menu, books)
                 self:showShelf()
             end,
         },
+        {
+            text = self.view_mode == "list" and _("View as covers") or _("View as list"),
+            callback = function()
+                self.view_mode = self.view_mode == "list" and "grid" or "list"
+                self:saveSettings()
+                if menu then UIManager:close(menu) end
+                self:showShelf()
+            end,
+        },
     }
     if pending > 0 then
         table.insert(items, {
@@ -893,31 +907,59 @@ function ShelfSync:showShelf()
     end
 
     local pending = self:pendingCount()
-    local items = {}
-    for _, book in ipairs(books) do
-        table.insert(items, {
-            book = book,
-            title = self:coverTitle(book),
-            subtitle = self:coverSubtitle(book),
-            cover_path = self:coverPath(book),
-        })
+    local title = T(_("Shelf · %1"), online and self:shelfStatusText() or _("offline"))
+    local subtitle = T(_("%1 books · %2 pending"), #books, pending)
+    local menu
+
+    if self.view_mode == "list" then
+        local items = {}
+        for _, book in ipairs(books) do
+            table.insert(items, {
+                text = self:bookTitle(book),
+                mandatory = self:bookProgressLabel(book),
+                callback = function() self:openBook(book) end,
+                hold_callback = function() self:showBookActions(book) end,
+            })
+        end
+        menu = CoverMenu.ListMenu:new{
+            title = title,
+            subtitle = subtitle,
+            item_table = items,
+            width = Device.screen:getWidth(),
+            height = Device.screen:getHeight(),
+            title_bar_fm_style = true,
+            title_bar_left_icon = "appbar.menu",
+            on_left_button_tap = function() self:showShelfActions(menu, books) end,
+        }
+    else
+        local items = {}
+        for _, book in ipairs(books) do
+            table.insert(items, {
+                book = book,
+                title = self:coverTitle(book),
+                subtitle = self:coverSubtitle(book),
+                cover_path = self:coverPath(book),
+                progress = self:bookProgress(book),
+            })
+        end
+        menu = CoverMenu:new{
+            title = title,
+            subtitle = subtitle,
+            item_table = items,
+            width = Device.screen:getWidth(),
+            height = Device.screen:getHeight(),
+            title_bar_fm_style = true,
+            title_bar_left_icon = "appbar.menu",
+            on_left_button_tap = function() self:showShelfActions(menu, books) end,
+            on_book_tap = function(entry) self:openBook(entry.book) end,
+            on_book_hold = function(entry) self:showBookActions(entry.book) end,
+        }
     end
 
-    local menu
-    menu = CoverMenu:new{
-        title = T(_("Shelf · %1"), online and self:shelfStatusText() or _("offline")),
-        subtitle = T(_("%1 books · %2 pending"), #books, pending),
-        item_table = items,
-        width = Device.screen:getWidth(),
-        height = Device.screen:getHeight(),
-        title_bar_fm_style = true,
-        title_bar_left_icon = "appbar.menu",
-        on_left_button_tap = function() self:showShelfActions(menu, books) end,
-        on_book_tap = function(entry) self:openBook(entry.book) end,
-        on_book_hold = function(entry) self:showBookActions(entry.book) end,
-    }
     UIManager:show(menu)
-    self:downloadMissingCovers(menu, books)
+    if self.view_mode ~= "list" then
+        self:downloadMissingCovers(menu, books)
+    end
 end
 
 function ShelfSync:showBookActions(book)
@@ -1294,6 +1336,29 @@ function ShelfSync:getSettingsMenuTable()
             end,
         },
         {
+            text = _("Shelf view"),
+            sub_item_table = {
+                {
+                    text = _("Covers"),
+                    radio = true,
+                    checked_func = function() return self.view_mode ~= "list" end,
+                    callback = function()
+                        self.view_mode = "grid"
+                        self:saveSettings()
+                    end,
+                },
+                {
+                    text = _("List"),
+                    radio = true,
+                    checked_func = function() return self.view_mode == "list" end,
+                    callback = function()
+                        self.view_mode = "list"
+                        self:saveSettings()
+                    end,
+                },
+            },
+        },
+        {
             text = _("Sort shelf"),
             sub_item_table = {
                 {
@@ -1344,6 +1409,10 @@ end
 -- --------------------------------------------------------------------- menu
 
 function ShelfSync:addToMainMenu(menu_items)
+    menu_items.shelf = {
+        text = _("Shelf"),
+        callback = function() self:showShelf() end,
+    }
     menu_items.shelfsync = {
         text_func = function()
             local pending = self:pendingCount()

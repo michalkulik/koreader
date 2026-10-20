@@ -172,6 +172,7 @@ local order = {
         "wikipedia_settings",
     },
     main = {
+        "shelf",
         "history",
         "open_last_document",
         "----------------------------",

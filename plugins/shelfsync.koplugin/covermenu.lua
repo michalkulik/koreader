@@ -18,6 +18,7 @@ local HorizontalSpan = require("ui/widget/horizontalspan")
 local ImageWidget = require("ui/widget/imagewidget")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local Menu = require("ui/widget/menu")
+local ProgressWidget = require("ui/widget/progresswidget")
 local Size = require("ui/size")
 local TextWidget = require("ui/widget/textwidget")
 local UIManager = require("ui/uimanager")
@@ -97,6 +98,16 @@ function CoverTile:init()
         fgcolor = Blitbuffer.COLOR_DARK_GRAY,
         max_width = self.width,
     }
+    local progress = ProgressWidget:new{
+        width = self.cover_w,
+        height = self.progress_h,
+        percentage = math.max(0, math.min(1, tonumber(self.progress) or 0)),
+        bgcolor = Blitbuffer.COLOR_WHITE,
+        bordercolor = Blitbuffer.COLOR_DARK_GRAY,
+        fillcolor = Blitbuffer.COLOR_BLACK,
+        margin_h = Screen:scaleBySize(1),
+        margin_v = Screen:scaleBySize(1),
+    }
 
     self[1] = FrameContainer:new{
         width = self.width,
@@ -108,7 +119,9 @@ function CoverTile:init()
         VerticalGroup:new{
             align = "center",
             cover,
-            VerticalSpan:new{ width = Screen:scaleBySize(3) },
+            VerticalSpan:new{ width = Screen:scaleBySize(2) },
+            progress,
+            VerticalSpan:new{ width = Screen:scaleBySize(2) },
             title,
             subtitle,
         },
@@ -164,8 +177,10 @@ function CoverMenu:_recalculateDimen()
     -- slightly squat aspect ratio lets two rows fit on a 600x800 Kindle.
     self.cover_w = self.item_width
     self.cover_h = math.floor(self.item_width * 1.35)
-    self.text_height = Screen:scaleBySize(44)
-    self.item_height = self.cover_h + self.text_height + Screen:scaleBySize(4)
+    self.progress_h = Screen:scaleBySize(8)
+    self.text_height = Screen:scaleBySize(46)
+    self.item_height = self.cover_h + self.progress_h
+        + self.text_height + Screen:scaleBySize(8)
 
     self.nb_rows = math.max(
         1,
@@ -224,10 +239,12 @@ function CoverMenu:_updateItemsBuildUI()
             title = entry.title,
             subtitle = entry.subtitle,
             cover_path = entry.cover_path,
+            progress = entry.progress,
             width = self.item_width,
             height = self.item_height,
             cover_w = self.cover_w,
             cover_h = self.cover_h,
+            progress_h = self.progress_h,
         }
         table.insert(cur_row, tile)
         table.insert(cur_row, HorizontalSpan:new{ width = self.item_margin })
@@ -270,5 +287,29 @@ function CoverMenu:onLeftButtonTap()
         self.on_left_button_tap()
     end
 end
+
+-- Plain text list view. It intentionally uses Menu's normal row layout, but
+-- keeps the same full-screen frame and title-bar actions as the cover grid.
+local ShelfListMenu = Menu:extend{
+    is_popout = false,
+    is_borderless = true,
+    covers_fullscreen = true,
+    title_bar_fm_style = true,
+}
+
+function ShelfListMenu:onLeftButtonTap()
+    if self.on_left_button_tap then
+        self.on_left_button_tap()
+    end
+end
+
+function ShelfListMenu:onMenuHold(item)
+    if item.hold_callback then
+        item.hold_callback(item)
+    end
+    return true
+end
+
+CoverMenu.ListMenu = ShelfListMenu
 
 return CoverMenu
