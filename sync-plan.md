@@ -752,6 +752,16 @@ KPM `.kpkg` `41 206 744` B, SHA-256
 `0e193331a3724a9fe66d6ae62c48a6a3383413c9593776c70bd914cf54333f08`.
 Manifest KPM wskazuje `[2026, 30, 0]`.
 
+**Poprawka v2026.31:** [`v2026.31`](https://github.com/michalkulik/koreader/releases/tag/v2026.31)
+— wyszukiwanie na półce używa `util.stringLower` (poprawna wielkość liter dla
+polskich znaków, np. `dzień` ↔ `Dzień`). Tag `507c9be04`. APK `30 121 615` B,
+SHA-256 `e78437d0710b6e1d65c96bbedb871d885ff991379b64bdb08414ab5ef09142c6`;
+Kindle ZIP `40 416 243` B, SHA-256
+`6beea42543e74d0a61474c0b40594ec347fa0dc41b472709575de1ac9876fd61`;
+KPM `.kpkg` `41 204 907` B, SHA-256
+`2406534403020b864d35d3c82871271dd9863c6e6063c2438966012cebcecb84`.
+Manifest KPM wskazuje `[2026, 31, 0]`.
+
 **KPM (2026-10-20):** osobne publiczne repo
 [`michalkulik/kpm-koreader`](https://github.com/michalkulik/kpm-koreader) z
 manifestem KPM i pakietem `koreader-mkulik` (`.kpkg`, target `kindlepw2`).
