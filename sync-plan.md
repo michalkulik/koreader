@@ -785,6 +785,18 @@ KPM `.kpkg` `41 207 916` B, SHA-256
 `3c81feab4c655d67e8f73ac5b0b1e75f2e408cc60a83588f3c13d59416be9281`.
 Manifest KPM wskazuje `[2026, 33, 0]`.
 
+**Wydanie v2026.34:** [`v2026.34`](https://github.com/michalkulik/koreader/releases/tag/v2026.34)
+— usunięto wtyczki **Calibre**, **Exporter** (Export highlights and notes),
+**Text editor**, **Terminal** i **HTTP inspector** wraz z ich pozycjami w menu
+i przyciskami eksportu w menu plików/historii. Tag `3e41376d4`.
+APK `30 068 367` B, SHA-256
+`b800c9f6cd5a7034272f4fb8fb392b40a1c66328ef925cf2da0626bb2d78daa3`;
+Kindle ZIP `40 322 894` B, SHA-256
+`be3ed245fbb0fd9f5630b23a3c455925980c09903b62c807f7edb209217fcc05`;
+KPM `.kpkg` `41 128 308` B, SHA-256
+`76333f86bd3d0bb7929cd99e351e9e87024e04c7719a250462d9562b273dae64`.
+Manifest KPM wskazuje `[2026, 34, 0]`.
+
 **KPM (2026-10-20):** osobne publiczne repo
 [`michalkulik/kpm-koreader`](https://github.com/michalkulik/kpm-koreader) z
 manifestem KPM i pakietem `koreader-mkulik` (`.kpkg`, target `kindlepw2`).
