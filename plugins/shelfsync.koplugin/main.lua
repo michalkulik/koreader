@@ -159,6 +159,11 @@ end
 function ShelfSync:relativeTime(timestamp)
     timestamp = tonumber(timestamp)
     if not timestamp or timestamp <= 0 then return _("never") end
+    -- The shelf server stores timestamps in milliseconds; local settings use
+    -- seconds. Accept either unit.
+    if timestamp > 100000000000 then
+        timestamp = math.floor(timestamp / 1000)
+    end
     local delta = os.time() - timestamp
     if delta < 0 then delta = 0 end
     if delta < 60 then return _("just now") end
