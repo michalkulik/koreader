@@ -774,6 +774,17 @@ KPM `.kpkg` `41 207 367` B, SHA-256
 `6e0bb83cc565748934bb65340afc1e388c913c852558b8335b8e81d91060fdc0`.
 Manifest KPM wskazuje `[2026, 32, 0]`.
 
+**Wydanie v2026.33:** [`v2026.33`](https://github.com/michalkulik/koreader/releases/tag/v2026.33)
+— dotknięcie górnego paska półki (tytuł + „last sync”) otwiera standardowe
+górne menu File managera/czytnika, a półka pozostaje pod nim otwarta; dodano
+**Close shelf** do menu bocznego. Tag `e8d2b61ca`. APK `30 125 711` B, SHA-256
+`bc64026e1958dc7250b9d218796c8dec194538cfe73d99e9967b034ec5faec1b`;
+Kindle ZIP `40 416 502` B, SHA-256
+`15503c7fcc9db9dc3dd89e64115ab19fc07674ae9d521e4cb1db41c2e57bbdbd`;
+KPM `.kpkg` `41 207 916` B, SHA-256
+`3c81feab4c655d67e8f73ac5b0b1e75f2e408cc60a83588f3c13d59416be9281`.
+Manifest KPM wskazuje `[2026, 33, 0]`.
+
 **KPM (2026-10-20):** osobne publiczne repo
 [`michalkulik/kpm-koreader`](https://github.com/michalkulik/kpm-koreader) z
 manifestem KPM i pakietem `koreader-mkulik` (`.kpkg`, target `kindlepw2`).
