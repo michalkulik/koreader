@@ -785,6 +785,21 @@ KPM `.kpkg` `41 207 916` B, SHA-256
 `3c81feab4c655d67e8f73ac5b0b1e75f2e408cc60a83588f3c13d59416be9281`.
 Manifest KPM wskazuje `[2026, 33, 0]`.
 
+**Wydanie v2026.36:** [`v2026.36`](https://github.com/michalkulik/koreader/releases/tag/v2026.36)
+— poprawka do v2026.35: ikonka **Shelf** w górnym menu menedżera plików
+odwoływała się do `self` spoza metody (`getDefaultMenuButtons` nie dostawał
+instancji menu). Teraz instancja jest przekazywana jawnie. Poza tym bez zmian
+względem v2026.35: rzędy okładek od lewej, większy odstęp między rzędami,
+stała ikonka Shelf w menu czytnika i menedżera plików, usunięta ikonka
+File browser z czytnika (długie przytrzymanie Shelf otwiera menedżer plików).
+Tag `9cc5fca18`. APK `30 064 271` B, SHA-256
+`f2da6424ea05334ca37359cd8be40b8fc9cc73b472a402affac608a35a5bc801`;
+Kindle ZIP `40 323 222` B, SHA-256
+`ad047b60e7c36c033de5379f1e3dc9e38264a9f99ac2b43ea9964fde504dd64c`;
+KPM `.kpkg` `41 129 111` B, SHA-256
+`8fcd11051cb88ad636eb85b75c3aed9ef98c834023002103f2484cdbd3a73808`.
+Manifest KPM wskazuje `[2026, 36, 0]`.
+
 **Wydanie v2026.35:** [`v2026.35`](https://github.com/michalkulik/koreader/releases/tag/v2026.35)
 — rzędy okładek na Shelf wyrównane do lewej, zwiększony odstęp między rzędami
 (okładka nie zasłania już procentu książki wyżej), stała ikonka **Shelf**
