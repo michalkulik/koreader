@@ -652,6 +652,16 @@ APK `30 281 359` B, SHA-256
 Kindle ZIP `40 813 662` B, SHA-256
 `1f39df5a46eff2490e093c0dd43181c54524e9c3f8228db36599e6117e24f645`.
 
+**Wydanie v2026.22:** [`v2026.22`](https://github.com/michalkulik/koreader/releases/tag/v2026.22)
+— **Add book from device** w menu półki (pełnoekranowy wybór plików, metadane,
+`partial_md5`, kolejka offline) oraz szybszy sync książki otwieranej z
+eksploratora Androida: upload/połączenie z półką po 1 s, potem pobranie postępu
+(nowa książka pojawia się na półce, znana od razu dostaje postęp z serwera).
+Tag: `ea9f50189`. APK `30 301 839` B, SHA-256
+`606a2556a4edbc751e0a8c43a96ee053be550366cc89450f4b75c457b688a86f`;
+Kindle ZIP `40 814 490` B, SHA-256
+`549ac9d147742a84e453bdeab2d9c9b5589d602dc2206656163c26cff6896983`.
+
 **Ograniczenia etapu 3.5:**
 - okładki PDF/MOBI/AZW3 wymagają dodatkowego renderera — na razie placeholder,
 - transfery plików i okładek nadal synchroniczne (LuaSocket),
