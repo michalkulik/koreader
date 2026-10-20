@@ -161,6 +161,44 @@ local CoverMenu = Menu:extend{
     item_margin = nil,
 }
 
+local function find_cover_tile(widget, pos)
+    if not widget then return nil end
+    local child_count = #widget
+    for i = 1, child_count do
+        local found = find_cover_tile(widget[i], pos)
+        if found then return found end
+    end
+    if widget.entry and widget.dimen and widget.dimen:contains(pos) then
+        return widget
+    end
+    return nil
+end
+
+function CoverMenu:init()
+    Menu.init(self)
+    -- A fallback for taps that arrive on the menu itself instead of a tile.
+    -- This happens after a popup menu is closed on some devices: the tile
+    -- widgets are still painted, but an upper full-screen tap zone can eat
+    -- their gesture.  Hit-testing the painted tiles makes selection reliable.
+    self.ges_events.CoverTileTapFallback = {
+        GestureRange:new{
+            ges = "tap",
+            range = Geom:new{
+                x = 0, y = 0,
+                w = Screen:getWidth(),
+                h = Screen:getHeight(),
+            },
+        },
+    }
+end
+
+function CoverMenu:onCoverTileTapFallback(arg, ges)
+    local tile = find_cover_tile(self.item_group, ges.pos)
+    if tile and tile.onTapSelect then
+        return tile:onTapSelect()
+    end
+end
+
 function CoverMenu:_recalculateDimen()
     local inner_w = self.inner_dimen.w
     local inner_h = self.inner_dimen.h

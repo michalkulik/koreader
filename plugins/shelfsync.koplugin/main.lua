@@ -87,6 +87,11 @@ end
 
 local settings_dir = DataStorage:getSettingsDir()
 
+-- Kept outside the plugin instance: opening a book replaces the current
+-- FileManager/ReaderUI, and therefore its plugin instance, while the opening
+-- indicator must remain closable by the new instance's ReaderReady handler.
+local opening_message
+
 local ShelfSync = WidgetContainer:extend{
     name = "shelfsync",
     is_doc_only = false,
@@ -114,6 +119,7 @@ function ShelfSync:init()
     self.last_error = tonumber(self.settings:readSetting("last_error"))
     self.library = sanitize_for_storage(self.settings:readSetting("library_cache", {}))
     self.library_time = tonumber(self.settings:readSetting("library_time")) or 0
+    self.last_opened = sanitize_for_storage(self.settings:readSetting("last_opened", {}))
 
     if not self.device_id then
         self.device_id = md5(tostring(os.time()) .. tostring(Device.model) .. tostring(math.random(1, 1000000)))
@@ -253,6 +259,60 @@ function ShelfSync:formatLastSync()
     return T(_("last sync %1"), self:relativeTime(self.last_sync))
 end
 
+-- Recency is deliberately local-first.  Server progress only changes when a
+-- page is turned and the push succeeds, so simply opening a book (or reading
+-- fewer than ten pages) used to leave the shelf order and "Continue reading"
+-- on the previously read book.  Keep a small local map of opened books and
+-- merge it with the server timestamp when sorting.
+function ShelfSync:normalizeTimestamp(timestamp)
+    timestamp = tonumber(timestamp) or 0
+    if timestamp > 100000000000 then
+        timestamp = math.floor(timestamp / 1000)
+    end
+    return timestamp
+end
+
+function ShelfSync:pruneLastOpened()
+    local entries = {}
+    for key, value in pairs(self.last_opened or {}) do
+        table.insert(entries, { key = key, value = tonumber(value) or 0 })
+    end
+    if #entries <= 500 then return end
+    table.sort(entries, function(a, b) return a.value < b.value end)
+    for i = 1, #entries - 500 do
+        self.last_opened[entries[i].key] = nil
+    end
+end
+
+function ShelfSync:markOpened(book, partial_md5)
+    if not self.last_opened then self.last_opened = {} end
+    local now = os.time()
+    local changed = false
+    if book and book.id then
+        self.last_opened["id:" .. book.id] = now
+        changed = true
+    end
+    if partial_md5 then
+        self.last_opened["md5:" .. partial_md5] = now
+        changed = true
+    end
+    if not changed then return end
+    self:pruneLastOpened()
+    self.settings:saveSetting("last_opened", self.last_opened)
+    self.settings:flush()
+end
+
+function ShelfSync:bookRecency(book)
+    local stamp = self:normalizeTimestamp(book.progress and book.progress.updated_at)
+    if book.id then
+        stamp = math.max(stamp, tonumber(self.last_opened["id:" .. book.id]) or 0)
+    end
+    if book.partial_md5 then
+        stamp = math.max(stamp, tonumber(self.last_opened["md5:" .. book.partial_md5]) or 0)
+    end
+    return stamp
+end
+
 function ShelfSync:sortBooks(books)
     local list = {}
     for _, book in ipairs(books or {}) do
@@ -273,8 +333,8 @@ function ShelfSync:sortBooks(books)
         end)
     else
         table.sort(list, function(a, b)
-            local ap = a.progress and tonumber(a.progress.updated_at) or 0
-            local bp = b.progress and tonumber(b.progress.updated_at) or 0
+            local ap = self:bookRecency(a)
+            local bp = self:bookRecency(b)
             if ap == bp then
                 return (tonumber(a.updated_at) or 0) > (tonumber(b.updated_at) or 0)
             end
@@ -290,7 +350,7 @@ function ShelfSync:continueBook(books)
         local progress = book.progress
         local percent = progress and tonumber(progress.percentage)
         if percent and percent > 0 and percent < 0.999 then
-            local stamp = tonumber(progress.updated_at) or 0
+            local stamp = self:bookRecency(book)
             if not best or stamp > best_time then
                 best = book
                 best_time = stamp
@@ -321,9 +381,53 @@ function ShelfSync:bookSubtitle(book, local_path)
     return table.concat(bits, " · ")
 end
 
+function ShelfSync:trackMenu(menu, key)
+    if not menu then return menu end
+    local original = menu.onCloseWidget
+    menu.onCloseWidget = function(widget)
+        if original then original(widget) end
+        if self[key] == widget then self[key] = nil end
+    end
+    self[key] = menu
+    return menu
+end
+
+function ShelfSync:closeShelf()
+    -- The shelf is a full-screen widget, not a child of the file manager.
+    -- Leaving it on UIManager's stack while a book loads hides the reader's
+    -- own "Opening file..." message and can leave stale touch handling behind.
+    for _, key in ipairs({ "book_actions_menu", "shelf_actions_menu", "shelf_menu" }) do
+        local widget = self[key]
+        if widget then
+            self[key] = nil
+            UIManager:close(widget)
+        end
+    end
+end
+
+function ShelfSync:showOpeningIndicator(book)
+    self:closeOpeningIndicator()
+    opening_message = InfoMessage:new{
+        text = T(_("Opening %1…"), self:coverTitle(book)),
+        timeout = 30,
+        show_icon = false,
+    }
+    UIManager:show(opening_message)
+end
+
+function ShelfSync:closeOpeningIndicator()
+    if opening_message then
+        UIManager:close(opening_message)
+        opening_message = nil
+    end
+end
+
 function ShelfSync:openBook(book)
     local local_path = self.index:find_by_book_id(book.id)
+    self:closeShelf()
     if local_path and lfs.attributes(local_path, "mode") == "file" then
+        self:markOpened(book, book.partial_md5)
+        self:showOpeningIndicator(book)
         filemanagerutil.openFile(self.ui, local_path)
     else
         self:downloadBook(book)
@@ -1034,6 +1138,7 @@ function ShelfSync:showShelfActions(shelf_menu, books)
         width = Device.screen:getWidth() * 0.9,
         title_bar_fm_style = true,
     }
+    self:trackMenu(actions_menu, "shelf_actions_menu")
     UIManager:show(actions_menu)
 end
 
@@ -1107,6 +1212,10 @@ function ShelfSync:showShelf()
         }
     end
 
+    if self.shelf_menu and self.shelf_menu ~= menu then
+        UIManager:close(self.shelf_menu)
+    end
+    self:trackMenu(menu, "shelf_menu")
     UIManager:show(menu)
     if self.view_mode ~= "list" then
         self:downloadMissingCovers(menu, books)
@@ -1139,12 +1248,14 @@ function ShelfSync:showBookActions(book)
         text = _("Details"),
         callback = function() self:showBookDetails(book, path) end,
     })
-    UIManager:show(Menu:new{
+    local actions_menu = Menu:new{
         title = self:bookTitle(book),
         item_table = items,
         width = Device.screen:getWidth() * 0.9,
         title_bar_fm_style = true,
-    })
+    }
+    self:trackMenu(actions_menu, "book_actions_menu")
+    UIManager:show(actions_menu)
 end
 
 function ShelfSync:removeLocalCopy(book, path)
@@ -1224,6 +1335,8 @@ function ShelfSync:downloadBook(book)
                 text = T(_("Downloaded to:\n%1\nOpen now?"), BD.filepath(dest)),
                 ok_text = _("Open"),
                 ok_callback = function()
+                    self:markOpened(book, book.partial_md5)
+                    self:showOpeningIndicator(book)
                     filemanagerutil.openFile(self.ui, dest)
                 end,
             })
@@ -1622,6 +1735,12 @@ function ShelfSync:scheduleProgressPush(delay)
 end
 
 function ShelfSync:onReaderReady()
+    self:closeOpeningIndicator()
+    local meta = self:currentBook()
+    if meta then
+        local book = self:findBookByMD5(meta.partial_md5)
+        self:markOpened(book, meta.partial_md5)
+    end
     if not self:isLoggedIn() then return end
     self.page_counter = 0
     self:cancelProgressPush()
@@ -1643,13 +1762,11 @@ end
 function ShelfSync:onPageUpdate(page)
     if not self:isLoggedIn() or not self.auto_progress then return end
     self.page_counter = (self.page_counter or 0) + 1
-    if self.page_counter >= 10 then
-        self.page_counter = 0
-        -- Do not block page turning with an HTTP request. Reschedule the
-        -- push after every burst; it runs once the reader has been idle for
-        -- two seconds. Fast page skipping therefore never waits for network.
-        self:scheduleProgressPush(2)
-    end
+    -- Do not block page turning with an HTTP request.  Reschedule the push
+    -- after every page change instead of waiting for ten pages: it runs once
+    -- the reader has been idle for two seconds, so a short reading session is
+    -- also reflected on the shelf.  Fast page skipping only resets the timer.
+    self:scheduleProgressPush(2)
 end
 
 function ShelfSync:onCloseDocument()
