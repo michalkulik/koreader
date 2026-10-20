@@ -1,0 +1,468 @@
+# Plan: półka zsynchronizowana między urządzeniami (Kindle-like)
+
+Cel: użytkownik otwiera książkę w KOReaderze, książka i postęp trafiają na własny serwer, a na innym urządzeniu (Android, Linux, jailbreakowany Kindle 10 / KindleBasic4) można ją otworzyć w tym samym miejscu. Dziś funkcje są rozproszone między `kosync` (postęp) i `cloud storage` (pliki), bez wspólnego modelu książki i półki.
+
+Zakres obejmuje też **profil ustawień przypisany do konta** (gesty, czcionki, UI, domyślne ustawienia czytnika), żeby skonfigurować KOReadera raz i zaciągnąć konfigurację na inne urządzenie.
+
+Zasady:
+
+- **Offline-first** — każda operacja najpierw do lokalnej kolejki, sync kiedy sieć jest dostępna.
+- **Manualny sync jest funkcją pierwszorzędną**, szczególnie na Kindle; automatyczny jest tylko „best effort”.
+- **Bez pełnego hashowania dużych plików na Kindle** — SHA-256 liczy serwer podczas uploadu.
+- **Kompatybilność z kosync** — ten sam serwer obsługuje stary protokół postępu.
+
+---
+
+## 1. Wykorzystywane elementy KOReadera
+
+| Funkcja | Gdzie | Co daje |
+|---|---|---|
+| Progress sync | `plugins/kosync.koplugin/` (`KOSyncClient.lua`, `api.json`) | protokół `users/auth`, `syncs/progress`, `partial_md5_checksum`, kolejka offline |
+| Cloud storage | `plugins/cloudstorage.koplugin/providers/webdav.lua` | streaming upload/download, ETag |
+| Pobieranie i otwieranie | `plugins/opds.koplugin/main.lua` | progres pobierania, „Read now” |
+| Kolekcje | `frontend/readcollection.lua`, `frontend/apps/filemanager/filemanagercollection.lua` | lokalne półki w `settings/collection.lua` |
+| Sieć / Wi-Fi | `frontend/ui/network/manager.lua` | `willRerunWhenOnline`, `beforeWifiAction`, obsługa Kindle |
+| Aktualizacje | `frontend/ui/otamanager.lua` | OTA dla Androida i Kindla |
+
+Brakuje wspólnego modelu `książka + plik + postęp + półka` po stronie serwera oraz klienta, który traktuje to jako całość.
+
+---
+
+## 2. Architektura
+
+```
+KOReader (Kindle / Android / Linux)
+  └─ plugin shelfsync.koplugin
+       ├─ lokalny indeks książek + kolejka operacji (JSON/SQLite)
+       ├─ klient HTTP (JSON + streaming plików)
+       ├─ synchronizacja ustawień (gesty, czcionki, UI) + czcionki własne
+       └─ UI półki (lista, okładki, „Czytaj dalej”, ręczny sync)
+                    │ HTTPS
+                    ▼
+        Caddy / Nginx Proxy Manager (TLS)
+                    │
+                    ▼
+        koreader-shelf (Docker, FastAPI/Go)
+          ├─ SQLite (WAL) lub Postgres
+          ├─ /data/books/<hash>.<ext>
+          ├─ /data/covers/<book_id>.jpg
+          ├─ /data/settings/<user>/<group>.json (wersjonowane)
+          ├─ /data/fonts/<sha256>.<ttf|otf>
+          └─ worker: okładki, metadane, sprzątanie
+```
+
+Serwer jest źródłem prawdy dla biblioteki; postęp to last-writer-wins z numerem rewizji; urządzenie jest offline-first.
+
+---
+
+## 3. Tożsamość książki i deduplikacja
+
+- **`partial_md5_checksum`** — już liczony przez KOReader; standard kosync. Używany jako `doc_id` dla postępu, dzięki czemu stary kosync i nowa półka dzielą dane.
+- **`content_sha256`** — liczony **na serwerze** podczas streamowanego uploadu. Klient wysyła `size`, `partial_md5`, `filename`; serwer liczy SHA-256 i po zakończeniu robi `rename`. Kindle 10 nie mieli dużych plików.
+- **`book_id`** — UUID serwera. Jeden plik = jedna książka (v1); grupowanie EPUB/MOBI po metadanych w v2.
+- Metadane: `doc_props` (tytuł, autor, seria, język, ISBN) wysyłane przy pierwszym otwarciu.
+- Okładki: generowane serwerowo (Calibre / `ebook-meta` / `pdftoppm`) lub wysyłane przez klienta; na Kindle preferowany serwer.
+
+---
+
+## 4. Serwer w Dockerze
+
+### Compose (v1, single-user)
+
+```yaml
+services:
+  shelf:
+    image: ghcr.io/michalkulik/koreader-shelf:latest
+    environment:
+      PUBLIC_URL: https://shelf.mkulik.eu
+      DATABASE_URL: sqlite:////data/shelf.db
+      BOOKS_DIR: /data/books
+      COVERS_DIR: /data/covers
+      AUTH_SECRET: ${AUTH_SECRET}
+      MAX_UPLOAD_MB: "512"
+    volumes:
+      - shelf-data:/data
+    restart: unless-stopped
+    # TLS: istniejący NPM/Caddy na oracle3
+
+volumes:
+  shelf-data:
+```
+
+SQLite w trybie WAL wystarczy dla jednego użytkownika. Postgres/MinIO dopiero przy wielu użytkownikach lub dużym ruchu. Backup: `restic`/`borg` katalogu `/data`.
+
+### API (v1)
+
+```
+POST /api/v1/auth/token        {username,password} -> {token,device_id}
+GET  /api/v1/sync?cursor=...   -> {books:[...],collections:[...],cursor,server_time}
+POST /api/v1/books             {partial_md5,size,filename,metadata} -> {book_id}
+PUT  /api/v1/books/{id}/file   (stream; serwer liczy sha256)
+GET  /api/v1/books/{id}/file   (Range: bytes=...)
+GET  /api/v1/books/{id}/cover
+PUT  /api/v1/books/{id}/progress {position,percentage,device_id,base_rev}
+GET  /api/v1/books/{id}/progress
+PUT  /api/v1/books/{id}/metadata
+GET/PUT /api/v1/collections
+
+GET  /api/v1/settings                     -> {schema, groups:{...}, updated_at}
+PUT  /api/v1/settings/{group}             {base_rev,data,device_class} -> {rev} | 409
+GET  /api/v1/settings/revisions           -> ostatnie N wersji (rollback)
+POST /api/v1/settings/revisions/{rev}/restore
+GET  /api/v1/fonts                        -> manifest czcionek własnych
+PUT  /api/v1/fonts/{sha256}               (upload pliku czcionki)
+GET  /api/v1/fonts/{sha256}               (download)
+```
+
+Kompatybilność z kosync na tym samym serwerze:
+
+```
+GET /users/auth
+PUT /syncs/progress
+GET /syncs/progress/:document
+```
+
+Dzięki temu istniejący plugin `kosync` działa po zmianie „Custom sync server”, a nowy plugin dokłada półkę i pliki.
+
+### Model danych (minimum)
+
+```
+users(id, username, password_hash)
+devices(id, user_id, name, last_seen)
+books(id, content_sha256, partial_md5, size, filename, title, authors, series,
+      language, cover, created_at)
+user_books(user_id, book_id, added_at, removed_at, last_opened_at, pin_offline)
+progress(user_id, book_id, device_id, position, percentage, rev, updated_at)
+collections(id, user_id, name, updated_at)
+collection_books(collection_id, book_id, added_at)
+uploads(id, user_id, book_id, received_bytes, status)
+
+settings_groups(user_id, group, rev, data_json, updated_at, updated_by_device)
+settings_revisions(id, user_id, group, rev, data_json, created_at)
+fonts(id, user_id, sha256, filename, size, created_at)
+```
+
+`rev` rośnie przy każdym zapisie postępu; `PUT` z nieaktualnym `base_rev` zwraca `409` i stan serwera — klient decyduje o konflikcie.
+
+---
+
+## 5. Klient: `plugins/shelfsync.koplugin`
+
+```
+plugins/shelfsync.koplugin/
+  main.lua        -- hooki, menu, akcja dispatchera, UI półki
+  client.lua      -- HTTP/JSON + streaming (socket.http, ltn12, socketutil)
+  queue.lua       -- trwała kolejka operacji (JSON w settings/)
+  index.lua       -- mapowanie ścieżka lokalna <-> book_id
+  progress.lua    -- odczyt/zapis pozycji (rolling/paging)
+  settings_sync.lua -- allowlist, diff, eksport/import ustawień, czcionki
+  ui.lua          -- lista półki, pasek statusu, long-press
+```
+
+### Hooki
+
+- `onReaderReady` — pobierz postęp; jeśli nowszy, zaproponuj przejście do pozycji.
+- `onPageUpdate` — push co N stron (domyślnie 5), z debounce.
+- `onCloseDocument`, `onSuspend` — wymuś push; przy braku sieci zostaw w kolejce.
+- `onResume`, `onNetworkConnected` — flush kolejki i pull zmian.
+- `onFlushSettings` — zapis kolejki/indeksu.
+
+### Przepływy
+
+1. **Otwarcie książki**
+   - `partial_md5` jest w indeksie i na serwerze: pobierz postęp, porównaj `rev`, ewentualnie zapytaj o konflikt.
+   - brak na serwerze: jeśli opcja „Wysyłaj przy otwarciu” włączona, dodaj upload do kolejki. Na Kindle najpierw pytanie „Wysłać na półkę? Włączyć Wi-Fi?”.
+2. **Zamknięcie / suspend** — push postępu z krótkim timeoutem; niewysłana książka trafia do kolejki.
+3. **Nowe urządzenie** — `GET /sync` pobiera bibliotekę, okładki, postępy i kolekcje. Tap:
+   - lokalna kopia istnieje: otwórz i zsynchronizuj pozycję,
+   - brak: pobierz do `download_dir`, zweryfikuj SHA-256, otwórz.
+4. **Konflikt** — serwer zwraca `409`; domyślnie nowszy `updated_at`, przy bliskich czasach pytanie. `base_rev` zapobiega ping-pongowi.
+
+---
+
+## 6. Synchronizacja ustawień (gesty, czcionki, UI)
+
+Cel: ustawić KOReadera na jednym urządzeniu i zaciągnąć te ustawienia na inne, jako część tego samego konta na serwerze. To nie jest synchronizacja postępu ani ustawień konkretnej książki — to **profil użytkownika**.
+
+### Co synchronizujemy
+
+| Grupa | Przykłady | Źródło | Domyślnie |
+|---|---|---|---|
+| `ui` | język, motyw, rozmiar UI, fallbacki czcionek UI, sortowanie menu | `G_reader_settings` (`settings.reader.lua`) | tak |
+| `reader` | domyślna czcionka, rozmiar, interlinia, marginesy, hyphenacja, pasek statusu | `G_reader_settings` + defaults | tak (bez DPI i podświetlenia) |
+| `gestures` | przypisania gestów, progi czasowe, `ignore_hold_corners`, `ges_*` | `settings/gestures.lua` + `G_reader_settings` | tak, z walidacją akcji |
+| `profiles` | profile, hotkeys, akcje dispatchera | `settings/profiles.lua`, `settings/hotkeys.lua` | opcjonalnie |
+| `collections` | nazwy półek i przypisania książek | `settings/collection.lua` | opcjonalnie (etap późniejszy) |
+| `fonts` | pliki czcionek własnych użytkownika | katalog `fonts/` | opcjonalnie, ręcznie |
+
+**Nie synchronizujemy** (denylist):
+
+- sekretów: `userkey`, hasła, tokeny, dane cloud storage, klucze API,
+- tożsamości urządzenia: `device_id`, `lastdir`, `home_dir`, ścieżki, `ota_server`,
+- sieci: Wi-Fi, proxy, DNS,
+- ekranu: DPI, rotacja, fullscreen, frontlight/warmth,
+- ustawień per dokument: `docsettings`, postęp, zakładki, wyróżnienia, statystyki,
+- cache'y, `defaults.custom.lua`, plików systemowych i czcionek systemowych (prawa autorskie).
+
+### Zasady
+
+- **Allowlist, nie cały plik ustawień** — serwer dostaje tylko wybrane klucze z wersjonowanym `schema_version`.
+- **Rewizje per grupa** — `PUT` z `base_rev`; przy niezgodności `409` i stan serwera. Ostatnie 10 wersji trzymamy do rollbacku.
+- **Podgląd różnic przed pobraniem** — lista zmienionych grup i kluczy (z nazwami czytelnymi dla znanych ustawień).
+- **Backup przed zastosowaniem** — kopia bieżących plików ustawień (np. `settings.backup-<timestamp>.tar.gz`).
+- **Zastosowanie przy starcie + restart** — zapis plików `LuaSettings`, potem `UIManager:askForRestart()`. Nie aplikujemy ustawień „na żywo”, żeby uniknąć połowicznego stanu.
+- **Walidacja gestów** — akcje dispatchera sprawdzane względem aktualnej wersji KOReadera; nieznane akcje są pomijane z ostrzeżeniem (różne wersje pluginów).
+- **Czcionki** — dopasowanie po nazwie pliku; jeśli czcionki nie ma, fallback + ostrzeżenie. Pliki własne wysyłane jako assety po `sha256` (tylko na żądanie, przez Wi-Fi).
+- **Profil urządzenia** — `device_class` (`kindle-basic4`, `android-arm64`, `linux`) pozwala na nakładki: np. gesty tylko na dotykowych, inne fallbacki czcionek, inne skróty sprzętowe. Domyślnie jeden wspólny profil.
+- **Automatyczność** — push po zmianie opcjonalny (debounce ~30 s, kolejka offline); **pull tylko ręcznie** albo przy pierwszym logowaniu na nowym urządzeniu, bo wymaga restartu.
+
+### Przepływy
+
+1. **Wysłanie ustawień**
+   - zbierz allowlistę z `G_reader_settings` i plików `settings/*.lua`,
+   - zserializuj do canonical JSON (stabilna kolejność kluczy),
+   - `PUT /api/v1/settings/{group}` z `base_rev`,
+   - zapisz `last_synced_rev` i czas.
+2. **Pobranie ustawień**
+   - `GET /api/v1/settings` → porównaj rewizje grup,
+   - pokaż „Zmienią się: Wygląd (3), Gesty (12), Czcionki (1)”,
+   - po potwierdzeniu: backup → zapis plików → ewentualne pobranie czcionek → restart.
+3. **Nowe urządzenie (onboarding)**
+   - logowanie do konta na serwerze,
+   - propozycja „Pobierz ustawienia z konta?”,
+   - wybór profilu urządzenia (domyślnie wykryty),
+   - zastosowanie i restart.
+4. **Konflikt**
+   - pokaż grupy z różnymi rewizjami i daty,
+   - wybór: „Zostaw lokalne / Weź z serwera / Podejrzyj różnice / Później”,
+   - po wyborze zapis z nowym `rev`.
+
+### UI
+
+`Ustawienia → Synchronizacja → Ustawienia`:
+
+```
+Konto: michal@serwer          [ Wyloguj ]
+Ostatnia synchronizacja: 2 dni temu · serwer rev 14
+Profil urządzenia: Kindle Basic 4
+
+[ ✓ ] Wygląd i czcionki UI
+[ ✓ ] Domyślne ustawienia czytnika
+[ ✓ ] Gesty
+[   ] Profile i skróty
+[   ] Kolekcje
+[   ] Czcionki własne
+
+[ Wyślij teraz ]  [ Pobierz teraz ]  [ Podejrzyj różnice ]
+[ ] Automatycznie wysyłaj zmiany
+```
+
+Na Kindle dodatkowo: ostrzeżenie, że pobranie ustawień wymaga restartu KOReadera i ewentualnego włączenia Wi-Fi.
+
+### Implementacja
+
+- `plugins/shelfsync.koplugin/settings_sync.lua`:
+  - `ALLOWLIST` / `DENYLIST` per grupa,
+  - `export_group()`, `import_group()`, `diff_groups()`,
+  - backup i rollback,
+  - walidacja akcji gestów przez `Dispatcher`,
+  - obsługa czcionek przez `DataStorage` / `ffiUtil`.
+- `plugins/shelfsync.koplugin/client.lua`: endpointy settings/fonts.
+- `plugins/shelfsync.koplugin/main.lua`: menu, onboarding, hook `onFlushSettings` (auto-push).
+- `frontend/ui/elements/common_settings_menu_table.lua` lub menu wtyczki: wejście do synchronizacji ustawień.
+- Zapis: `LuaSettings` (`settings.reader.lua`, `gestures.lua`, `profiles.lua`, `collection.lua`), `flush()` po imporcie.
+- Restart: `UIManager:askForRestart()`.
+
+### Testy
+
+- round-trip eksport → import na drugim urządzeniu,
+- allowlist nie przepuszcza sekretów ani ścieżek,
+- diff pokazuje właściwe grupy,
+- konflikt `409` nie nadpisuje nowszej wersji,
+- nieznana akcja gestu jest pomijana,
+- brak czcionki → fallback + ostrzeżenie,
+- rollback do poprzedniej rewizji,
+- dwa urządzenia naprzemiennie zmieniające ustawienia,
+- migracja `schema_version`.
+
+---
+
+## 7. UI półki i ręczny sync
+
+Pasek stanu na górze ekranu biblioteki:
+
+```
+Półka                          [ ⟳ Synchronizuj ]
+Ostatnia synchronizacja: 2 min temu · 3 zmiany w kolejce
+```
+
+- **`⟳ Synchronizuj`** — pełny sync na żądanie.
+- Podpis: czas ostatniego udanego syncu + liczba oczekujących operacji.
+- Błędy: „1 błąd — dotknij, aby zobaczyć szczegóły”.
+- Osobny wpis: **„Wyślij książki z tego urządzenia”**.
+
+### Sekwencja ręcznego syncu
+
+1. Sprawdź sieć:
+   - Android/Linux: `NetworkMgr:willRerunWhenOnline()`.
+   - Kindle: `ConfirmBox` „Włączyć Wi-Fi i zsynchronizować?”; po syncu przywróć poprzedni stan (`NetworkMgr:beforeWifiAction`).
+2. Wyślij lokalne zmiany: postępy, metadane/okładki, kolekcje.
+3. Wyślij oczekujące pliki z kolejki (progres per książka).
+4. Pobierz zmiany przez `GET /sync?cursor=...`.
+5. Rozwiąż konflikty (`409`): „Zostaw lokalny / Weź z serwera / Później”.
+6. Odśwież półkę, zapisz nowy `cursor` i czas syncu.
+
+Całość w korutynie (`Trapper:wrap`), z `ProgressbarDialog`/`InfoMessage`, możliwością anulowania. Na czas transferu zablokuj autostandby. E-ink: jedno odświeżenie na start i jedno na koniec.
+
+Po zakończeniu konkretny raport zamiast „OK”:
+
+```
+Zsynchronizowano.
+Postępy: 2 · Wysłano książki: 1 · Nowe książki: 3
+Błędy: 1 (dotknij)
+```
+
+Błąd sieci nie czyści kolejki. Operacje są idempotentne (dedupe po `partial_md5` / `content_sha256`, postęp nie nadpisuje nowszego `rev`).
+
+### Sync per książka (long-press)
+
+- **Synchronizuj tę książkę** — tylko postęp + plik.
+- **Wyślij na serwer** — dla książki lokalnej.
+- **Pobierz** / **Usuń lokalną kopię** — zarządzanie miejscem na Kindle.
+- **Otwórz mimo to** — gdy plik jest lokalny, a sync się nie udał.
+
+### Dodatkowe wejścia
+
+- Dispatcher/gest: akcja „Synchronizuj półkę”.
+- Menu wtyczki: „Synchronizuj teraz”, „Pokaż kolejkę”, „Ostatnie błędy”, „Ustawienia synchronizacji”.
+- Automatycznie: otwarcie półki, zamknięcie książki, suspend, powrót sieci — bez wymuszania Wi-Fi, z krótkim timeoutem, cicho do kolejki.
+
+---
+
+## 8. Kindle 10 (KindleBasic4) — wymagania
+
+- **Brak tła** — brak ciągłego połączenia w uśpieniu; sync tylko przy otwarciu półki, resume, zamknięciu książki i suspendzie. Na Androidzie można dodać WebSocket/SSE tylko gdy aplikacja jest na wierzchu.
+- **Wi-Fi na żądanie** — `Device:hasWifiToggle`, `NetworkMgr:turnOnWifiAndWaitForConnection`, `NetworkMgr:beforeWifiAction`; przywróć poprzedni stan.
+- **CPU/RAM** — zero pełnego hashowania na kliencie, streaming download/upload, brak ładowania całej książki do RAM, okładki tylko w rozmiarze miniatury.
+- **Stary TLS** — poprawny certyfikat Let's Encrypt, TLS 1.2; test na urządzeniu.
+- **Ścieżki** — download do `/mnt/us/documents/koreader-shelf/` lub katalogu użytkownika; `Device:isValidPath`.
+- **Formaty** — bez DRM (EPUB/MOBI/AZW3/PDF); książki z DRM się nie zsynchronizują.
+
+---
+
+## 9. Aktualizacje aplikacji — źródło: fork na GitHubie
+
+**Ważne:** obecny `v2026.10` ma OTA włączone (flavor `rocks`, `IN_APP_UPDATES=true`), ale domyślny serwer w `frontend/ui/otamanager.lua` to nadal upstream:
+
+```lua
+ota_servers = {
+    "http://ota.koreader.rocks/",
+    "https://github.com/koreader/koreader/releases/download/ota/",
+    ...
+}
+```
+
+Na Androidzie `Device:otaModel()` zwraca `android-arm64` + typ `link`: pobierany jest `koreader-android-arm64-latest-stable` (pierwsza linia = nazwa APK), potem APK i `android.ota.install()`. Efekt: „Update” proponuje oficjalny KOReader i nadpisuje fork.
+
+### Rekomendowane rozwiązanie
+
+1. Dodawać do każdego wydania `latest.json`:
+
+```json
+{
+  "version": "v2026.11",
+  "versionCode": 122122,
+  "url": "https://github.com/michalkulik/koreader/releases/download/v2026.11/koreader-android-arm64-v2026.11.apk",
+  "sha256": "…",
+  "size": 30236303,
+  "abi": "arm64-v8a"
+}
+```
+
+2. W aplikacji sprawdzać `https://github.com/michalkulik/koreader/releases/latest/download/latest.json`:
+   - porównaj `versionCode`,
+   - pobierz APK przez `android.download()`,
+   - zweryfikuj SHA-256,
+   - zainstaluj `android.ota.install()`.
+
+   Trzeba obsłużyć redirect GitHuba (LuaSocket sam nie podąża za 301) albo użyć `httpclient`.
+
+3. Alternatywa minimalna: zmienić `ota_servers[1]` na własny feed (`https://ota.mkulik.eu/koreader/` lub tag `ota` w forku) i publikować:
+   - `koreader-android-arm64-latest-stable`,
+   - APK.
+
+4. Kindle: KOReader używa `kotasync` i modelu `kindlepw2`. Dla aktualizacji z forka trzeba publikować `koreader-kindlepw2-latest-stable.kotasync` + `update.tar.xz`; inaczej ręczne kopiowanie.
+
+5. W `getOTAMenuTable()` dodać wpis „Źródło: github.com/michalkulik/koreader” (link przez `Device:openLink`).
+
+6. Każda aktualizacja podpisana tym samym kluczem `koreader-release.jks` (PackageInstaller odrzuci inny podpis). Klucz i `credentials.txt` w backupie.
+
+---
+
+## 10. Etapy wdrożenia
+
+1. **Serwer v1** — auth, biblioteka, upload/download, postęp, kosync-compat, Docker + testy. ✅ **ukończony 2026-10-20** (szczegóły w §12).
+2. **Plugin v1** — kolejka, indeks, sync postępu, upload przy otwarciu, download z półki.
+3. **UI półki** — lista, okładki, „Czytaj dalej”, status offline, ręczny sync.
+4. **Ustawienia** — profil ustawień na koncie: UI/czytnik/gesty, podgląd różnic, backup, rollback, czcionki własne.
+5. **Kolekcje** — dwukierunkowa synchronizacja z `collection.lua`.
+6. **Kindle tuning** — Wi-Fi, streaming, limity, testy na KindleBasic4.
+7. **OTA** — `latest.json` / feed na forku + wpis „Źródło aktualizacji”.
+
+---
+
+## 11. Ryzyka
+
+- **Brak prawdziwego pusha na Kindle** — „natychmiast” dotyczy tylko otwartej aplikacji na Androidzie; na Kindle sync przy zdarzeniach lub ręcznie.
+- **Duże pliki** — limit uploadu, streaming; resumable upload w v2.
+- **DRM / prawa autorskie** — synchronizujemy tylko pliki użytkownika.
+- **Rozjazd wersji silnika** — xpointer może się różnić między wersjami KOReadera; trzymać podobne wersje na urządzeniach.
+- **Bezpieczeństwo** — HTTPS, token per urządzenie, rate limit, brak dostępu do plików bez auth.
+- **Podpis APK** — zmiana klucza wymusza odinstalowanie aplikacji; klucz trzeba chronić i backupować.
+- **Ustawienia a różnice urządzeń** — DPI, podświetlenie, sprzętowe klawisze i dostępność czcionek mogą się różnić; dlatego allowlist + profil urządzenia, nigdy ślepe kopiowanie całego `settings.reader.lua`.
+- **Ustawienia a sekrety** — `userkey`, hasła, tokeny i dane sieci muszą być twardo wykluczone; test jednostkowy pilnujący denylisty.
+- **Restart po imporcie** — na Kindle restart jest odczuwalny; pobieranie ustawień tylko ręcznie/na onboardingu, nie automatycznie przy każdym starcie.
+- **Zgodność akcji gestów** — nazwy akcji dispatchera zmieniają się między wersjami; nieznane akcje pomijane, nigdy nie wywalają importu.
+- **Czcionki** — synchronizujemy tylko pliki własne użytkownika; czcionki systemowe i licencjonowane pozostają lokalne, brak pliku → fallback.
+
+---
+
+## 12. Postęp wdrożenia
+
+### Etap 1 — serwer v1 (2026-10-20) ✅
+
+**Repozytorium:** <https://github.com/michalkulik/koreader-server> (prywatne, tag `v0.1.0`, commit `ab208c1`).
+
+**Obraz Dockera:** `ghcr.io/michalkulik/koreader-server:0.1.0` (oraz `:latest`).
+
+**Wdrożenie:**
+- host: `ubuntu` (192.168.69.11),
+- Portainer: stack `koreader-server` (Id 73, endpoint 3), kontener `koreader-server`,
+- port: `8099` → `8080` w kontenerze,
+- dane: `/srv/koreader-server/data` (`shelf.db` + `books/`), właściciel `10001:10001`,
+- healthcheck: `GET /health` → `{"status":"ok"}`,
+- konto testowe: `michal` (hasło poza repozytorium, plik `600` na hp:
+  `/root/.local/share/koreader-server/credentials.txt`).
+
+**Zaimplementowane endpointy:**
+- konta: `POST /api/v1/auth/register`, `POST /api/v1/auth/token`,
+  `GET /api/v1/me`, `POST /api/v1/auth/logout`,
+- kosync: `POST /users/create`, `GET /users/auth`,
+  `PUT /syncs/progress`, `GET /syncs/progress/:document`,
+- biblioteka: `POST /api/v1/books`, `GET /api/v1/books`,
+  `GET /api/v1/books/{id}`, `PUT /api/v1/books/{id}/file`,
+  `GET /api/v1/books/{id}/file` (Range), `DELETE /api/v1/books/{id}`,
+- postęp: `GET/PUT /api/v1/books/{id}/progress` (`base_rev`, konflikt `409`),
+- sync przyrostowy: `GET /api/v1/sync?cursor=...`,
+- `GET /health`, `GET /api/v1/info`.
+
+**Testy:** `pytest -q` → 7 passed (rejestracja/logowanie, kosync, upload/download/Range,
+dedupe po `partial_md5`, zgodność rozmiaru, rewizje i konflikt postępu, auth).
+
+**Uwagi:**
+- Etap 1 nie ma jeszcze UI półki ani uploadu z KOReadera — to etap 2.
+- Postęp można już synchronizować **istniejącym pluginem kosync**: w KOReaderze ustaw
+  *Custom sync server* na `http://192.168.69.11:8099/` i zaloguj się na konto.
+- Serwer działa po HTTP w LAN. HTTPS przez NPM/Caddy i dostęp z zewnątrz — kolejny krok.
+- Backup: kopia `/srv/koreader-server/data`.
+
