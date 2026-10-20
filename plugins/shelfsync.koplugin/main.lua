@@ -837,10 +837,122 @@ function ShelfSync:downloadMissingCovers(menu, books)
     end)
 end
 
+function ShelfSync:readBookProps(path)
+    local DocumentRegistry = require("document/documentregistry")
+    if not DocumentRegistry:hasProvider(path) then return {} end
+    local ok, document = pcall(DocumentRegistry.openDocument, DocumentRegistry, path)
+    if not ok or not document then return {} end
+    local props = {}
+    pcall(function()
+        if document.loadDocument then
+            document:loadDocument(false)
+        end
+        props = document:getProps() or {}
+    end)
+    pcall(function() document:close() end)
+    return props
+end
+
+function ShelfSync:uploadPathToShelf(path)
+    if not path or lfs.attributes(path, "mode") ~= "file" then
+        self:showInfo(_("Book file not found."))
+        return
+    end
+    local entry = self.index:get(path)
+    if entry and entry.uploaded then
+        self:showInfo(_("This book is already on the shelf."), 2)
+        return
+    end
+    local size = lfs.attributes(path, "size")
+    if not size or size <= 0 then
+        self:showInfo(_("Book file is empty."))
+        return
+    end
+    local filename = path:match("([^/\\]+)$") or path
+    local partial_md5 = util.partialMD5(path)
+    if not partial_md5 then
+        self:showInfo(_("Could not read the book fingerprint."))
+        return
+    end
+    local props = self:readBookProps(path)
+    local authors = props.authors
+    if type(authors) == "table" then
+        authors = table.concat(authors, ", ")
+    end
+    local title = props.title
+    if not title or title == "" then
+        title = filename:gsub("%.[^.]+$", "")
+    end
+    local added = self.queue:add({
+        kind = "upload",
+        path = path,
+        partial_md5 = partial_md5,
+        size = size,
+        filename = filename,
+        title = title,
+        authors = authors,
+        series = props.series,
+        language = props.language,
+    })
+    if NetworkMgr:isOnline() then
+        self:flushQueue(false)
+    end
+    self:showShelf()
+    self:showInfo(added
+        and T(_("Shelf: queued %1 for upload."), filename)
+        or T(_("Shelf: %1 is already queued."), filename), 3)
+end
+
+function ShelfSync:addBookFromDevice()
+    local FileChooser = require("ui/widget/filechooser")
+    local ui = self.ui
+    if not (ui and ui.folder_shortcuts) then
+        local ok, FileManager = pcall(require, "apps/filemanager/filemanager")
+        if ok and FileManager.instance then
+            ui = FileManager.instance
+        end
+    end
+    if not (ui and ui.folder_shortcuts) then
+        -- FileChooser only needs this one UI method when it is not embedded in
+        -- the file manager (e.g. the shelf was opened from the reader).
+        ui = {
+            folder_shortcuts = {
+                hasFolderShortcut = function() return false end,
+            },
+        }
+    end
+    local start_path = self.download_dir
+        or G_reader_settings:readSetting("lastdir")
+        or filemanagerutil.getHomeFolder()
+    local chooser
+    chooser = FileChooser:new{
+        ui = ui,
+        path = start_path,
+        title = _("Add book to shelf"),
+        file_filter = function(filename)
+            local DocumentRegistry = require("document/documentregistry")
+            return DocumentRegistry:hasProvider(filename)
+        end,
+    }
+    chooser.onFileSelect = function(_, item)
+        UIManager:close(chooser)
+        self:uploadPathToShelf(item.path)
+        return true
+    end
+    UIManager:show(chooser)
+end
+
 function ShelfSync:showShelfActions(menu, books)
     local online = NetworkMgr:isOnline()
     local pending = self:pendingCount()
     local items = {
+        {
+            text = _("Add book from device"),
+            callback = function()
+                if menu then UIManager:close(menu) end
+                self:addBookFromDevice()
+            end,
+        },
         {
             text = _("Synchronize now"),
             mandatory = T(_("%1 · %2 pending"),
