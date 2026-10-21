@@ -249,10 +249,13 @@ function CoverMenu:_recalculateDimen()
     self.item_width = math.floor(
         (inner_w - (self.nb_cols + 1) * self.item_margin) / self.nb_cols
     )
-    -- Keep the covers recognisable but leave room for two text lines.  A
-    -- slightly squat aspect ratio lets two rows fit on a 600x800 Kindle.
+    -- Start with a portrait cover and shrink it only if the text block and
+    -- two rows would not fit.  On a 600x800 Kindle the old fixed 1.35 ratio
+    -- left enough space for just one row, despite a lot of visible free space
+    -- below it.
     self.cover_w = self.item_width
-    self.cover_h = math.floor(self.item_width * 1.35)
+    local base_cover_h = math.floor(self.item_width * 1.35)
+    self.cover_h = base_cover_h
     self.progress_h = Screen:scaleBySize(8)
 
     -- Measure a real tile instead of guessing the height of the text block.
@@ -273,27 +276,40 @@ function CoverMenu:_recalculateDimen()
     }
     local content_height = probe[1]:getSize().h
     probe:free()
-    -- Leave a little empty space below the percentage as well, so the next
-    -- row starts clearly below it, not just one hairline away.
-    self.item_height = content_height + Screen:scaleBySize(8)
+    local text_height = math.max(0, content_height - base_cover_h)
+    local item_pad = Screen:scaleBySize(8)
 
-    -- Bigger row gap than the old 6px.  On small 600x800 screens cap it so
-    -- two rows still fit; on phones the scaled value is noticeably larger.
-    local preferred_margin = Screen:scaleBySize(22)
+    -- Smaller row gaps on small e-ink screens; phones get the roomier value.
+    local preferred_margin = Screen:scaleBySize(
+        Screen:getHeight() <= 900 and 14 or 22)
+    local min_margin = Screen:scaleBySize(8)
     local max_margin_for_two_rows = math.floor(
-        (self.available_height - 2 * self.item_height) / 3
+        (self.available_height - 2 * (base_cover_h + text_height + item_pad)) / 3
     )
     self.row_margin = math.max(
-        Screen:scaleBySize(12),
+        min_margin,
         math.min(preferred_margin, max_margin_for_two_rows)
     )
 
+    -- If two full rows still do not fit, reduce the cover height.  Keep a
+    -- sensible minimum so the covers remain recognisable.
+    local max_cover_h = math.floor(
+        (self.available_height - 3 * self.row_margin) / 2
+            - text_height - item_pad
+    )
+    if max_cover_h < self.cover_h then
+        self.cover_h = math.max(Screen:scaleBySize(80), max_cover_h)
+    end
+
+    -- Leave a little empty space below the percentage as well, so the next
+    -- row starts clearly below it, not just one hairline away.
+    self.item_height = self.cover_h + text_height + item_pad
+
     -- Count whole rows including the spacer above the first row and below the
-    -- last one.  This avoids the old approximate division that could report
-    -- one row too many.
+    -- last one.  Allow a one-pixel rounding tolerance.
     self.nb_rows = 0
     while (self.nb_rows + 1) * self.item_height
-            + (self.nb_rows + 2) * self.row_margin <= self.available_height do
+            + (self.nb_rows + 2) * self.row_margin <= self.available_height + 1 do
         self.nb_rows = self.nb_rows + 1
     end
     self.nb_rows = math.max(1, self.nb_rows)
