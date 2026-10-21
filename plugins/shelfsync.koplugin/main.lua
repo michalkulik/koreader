@@ -165,18 +165,69 @@ function ShelfSync:init()
     })
 end
 
+-- Each UI (file manager and reader) has its own plugin instance.  Always write
+-- non-auth settings into a freshly opened settings table: a stale instance
+-- must not overwrite the login token saved by another instance, and must not
+-- clobber settings changed elsewhere.
 function ShelfSync:saveSettings()
-    self.settings:saveSetting("server_url", self.server_url)
-    self.settings:saveSetting("username", self.username)
-    self.settings:saveSetting("token", self.token)
-    self.settings:saveSetting("device_id", self.device_id)
-    self.settings:saveSetting("device_name", self.device_name)
-    self.settings:saveSetting("download_dir", self.download_dir)
-    self.settings:saveSetting("auto_upload", self.auto_upload)
-    self.settings:saveSetting("auto_progress", self.auto_progress)
-    self.settings:saveSetting("sort_mode", self.sort_mode)
-    self.settings:saveSetting("view_mode", self.view_mode)
-    self.settings:flush()
+    local settings = LuaSettings:open(settings_dir .. "/shelfsync.lua")
+    settings:saveSetting("device_name", self.device_name)
+    settings:saveSetting("download_dir", self.download_dir)
+    settings:saveSetting("auto_upload", self.auto_upload)
+    settings:saveSetting("auto_progress", self.auto_progress)
+    settings:saveSetting("sort_mode", self.sort_mode)
+    settings:saveSetting("view_mode", self.view_mode)
+    settings:flush()
+    self.settings = settings
+end
+
+function ShelfSync:saveAuthSettings()
+    local settings = LuaSettings:open(settings_dir .. "/shelfsync.lua")
+    settings:saveSetting("server_url", self.server_url)
+    settings:saveSetting("username", self.username)
+    settings:saveSetting("token", self.token)
+    settings:saveSetting("device_id", self.device_id)
+    settings:saveSetting("device_name", self.device_name)
+    settings:flush()
+    self.settings = settings
+end
+
+-- Reload auth and the local index/queue from disk.  Without this, opening a
+-- downloaded book through a different UI instance could still use the old
+-- token (causing another login prompt) and the old index (so a fresh download
+-- did not look like a shelf-managed download, and server progress was not
+-- applied automatically).
+function ShelfSync:reloadFromDisk()
+    self.settings = LuaSettings:open(settings_dir .. "/shelfsync.lua")
+    self.server_url = self.settings:readSetting("server_url", "https://shelf.mkulik.eu")
+    self.username = self.settings:readSetting("username")
+    self.token = self.settings:readSetting("token")
+    self.device_id = self.settings:readSetting("device_id")
+    self.device_name = self.settings:readSetting("device_name", Device.model or "KOReader")
+    self.download_dir = self.settings:readSetting("download_dir")
+    self.auto_upload = self.settings:readSetting("auto_upload", true)
+    self.auto_progress = self.settings:readSetting("auto_progress", true)
+    self.sort_mode = self.settings:readSetting("sort_mode", "recent")
+    self.view_mode = self.settings:readSetting("view_mode", "grid")
+    if self.view_mode ~= "list" then self.view_mode = "grid" end
+    self.last_sync = tonumber(self.settings:readSetting("last_sync"))
+    self.last_error = tonumber(self.settings:readSetting("last_error"))
+    self.library = sanitize_for_storage(self.settings:readSetting("library_cache", {}))
+    self.library_time = tonumber(self.settings:readSetting("library_time")) or 0
+    self.last_opened = sanitize_for_storage(self.settings:readSetting("last_opened", {}))
+
+    if not self.device_id then
+        self.device_id = md5(tostring(os.time()) .. tostring(Device.model) .. tostring(math.random(1, 1000000)))
+        self.settings:saveSetting("device_id", self.device_id)
+        self.settings:flush()
+    end
+
+    self.index = Index:new(settings_dir .. "/shelfsync_index.lua")
+    self.queue = Queue:new(settings_dir .. "/shelfsync_queue.lua")
+    self.client = Client:new{
+        base_url = self.server_url,
+        token = self.token,
+    }
 end
 
 function ShelfSync:isLoggedIn()
@@ -194,7 +245,7 @@ function ShelfSync:handleError(code, body, action)
     if code == 401 then
         self.token = nil
         self.client.token = nil
-        self:saveSettings()
+        self:saveAuthSettings()
         self:showInfo(_("Shelf sync: log in again."))
         return
     end
@@ -207,9 +258,10 @@ function ShelfSync:handleError(code, body, action)
 end
 
 function ShelfSync:onFlushSettings()
-    if self.settings then self:saveSettings() end
-    if self.queue then self.queue:save() end
-    if self.index then self.index:save() end
+    -- Auth, index and queue save themselves immediately after every change.
+    -- Writing this instance's cached copies here would overwrite newer state
+    -- saved by the other UI instance (for example, it used to erase a token
+    -- just saved by the shelf in the file manager).
 end
 
 -- ------------------------------------------------------------------- status
@@ -989,7 +1041,7 @@ function ShelfSync:flushQueue(interactive)
                 if err == "unauthorized" then
                     self.token = nil
                     self.client.token = nil
-                    self:saveSettings()
+                    self:saveAuthSettings()
                     break
                 end
             end
@@ -1009,6 +1061,7 @@ function ShelfSync:flushQueue(interactive)
 end
 
 function ShelfSync:syncNow()
+    self:reloadFromDisk()
     if not self:isLoggedIn() then
         self:showLoginDialog()
         return
@@ -1325,6 +1378,7 @@ function ShelfSync:attachShelfSearch(menu, all_books)
 end
 
 function ShelfSync:showShelf()
+    self:reloadFromDisk()
     if not self:isLoggedIn() then
         self:showLoginDialog(function() self:showShelf() end)
         return
@@ -1596,7 +1650,7 @@ function ShelfSync:showServerDialog()
                         if url and url ~= "" then
                             self.server_url = Client.normalize_url(url)
                             self.client = Client:new{ base_url = self.server_url, token = self.token }
-                            self:saveSettings()
+                            self:saveAuthSettings()
                             self:showInfo(_("Server address saved."))
                         end
                     end,
@@ -1722,7 +1776,7 @@ function ShelfSync:doLogin(username, password, on_success)
     self.token = data.token
     self.device_id = data.device_id
     self.client = Client:new{ base_url = self.server_url, token = self.token }
-    self:saveSettings()
+    self:saveAuthSettings()
     self:showInfo(T(_("Logged in as %1."), username))
     if on_success then
         on_success()
@@ -1734,11 +1788,12 @@ end
 function ShelfSync:doLogout()
     self.token = nil
     self.client.token = nil
-    self:saveSettings()
+    self:saveAuthSettings()
     self:showInfo(_("Logged out from shelf sync."))
 end
 
 function ShelfSync:getSettingsMenuTable()
+    self:reloadFromDisk()
     return {
         {
             text = _("Server address"),
@@ -1934,6 +1989,7 @@ end
 
 function ShelfSync:onReaderReady()
     self:closeOpeningIndicator()
+    self:reloadFromDisk()
     local meta = self:currentBook()
     if meta then
         local book = self:findBookByMD5(meta.partial_md5)
