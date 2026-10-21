@@ -889,6 +889,19 @@ function ShelfSync:pullProgress(interactive)
             last_rev = book.progress.rev,
         })
     end
+
+    -- If this device is further into the book than the server (for example
+    -- after the server was accidentally overwritten with page one), do not
+    -- pull the reader backwards. Keep the local position and send it back.
+    if current_percentage and book.progress.percentage
+        and current_percentage > book.progress.percentage + 0.005 then
+        remember()
+        self:scheduleProgressPush(2)
+        if interactive then
+            self:showInfo(_("Local progress is ahead; sending it to the shelf."))
+        end
+        return finish("local-ahead")
+    end
     local function apply()
         self:gotoPosition(book.progress.position)
         remember()
