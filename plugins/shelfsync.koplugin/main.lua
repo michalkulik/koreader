@@ -312,6 +312,20 @@ function ShelfSync:markSyncResult(failed)
     self:refreshShelfTitle()
 end
 
+-- A successful server exchange that is not a full sync (library refresh,
+-- progress pull, deletion) still means the shelf is up to date.  Keep the
+-- last-sync timestamp honest without clearing errors for pending queue items.
+function ShelfSync:markSyncSuccess()
+    self.last_sync = os.time()
+    if self:pendingCount() == 0 then
+        self.last_error = nil
+    end
+    self.settings:saveSetting("last_sync", self.last_sync)
+    self.settings:saveSetting("last_error", self.last_error)
+    self.settings:flush()
+    self:refreshShelfTitle()
+end
+
 function ShelfSync:shelfStatusText()
     local status = self:formatLastSync()
     if self.last_error and self.last_error > 0 then
@@ -646,6 +660,7 @@ function ShelfSync:refreshLibrary()
     self.settings:saveSetting("library_cache", books)
     self.settings:saveSetting("library_time", self.library_time)
     self.settings:flush()
+    self:markSyncSuccess()
     return books
 end
 
@@ -1608,6 +1623,7 @@ function ShelfSync:deleteBookNow(book)
         ok, err = self:deleteRemoteBook(book.id)
     end
     if ok then
+        self:markSyncSuccess()
         self:showInfo(_("Book deleted from the shelf."), 3)
     else
         self.queue:add(item)
