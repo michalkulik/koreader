@@ -1,4 +1,5 @@
 local ScreenClock = require("ui/widget/screenclock")
+local _ = require("gettext")
 
 return {
     text = _("Show clock in top-right corner"),
