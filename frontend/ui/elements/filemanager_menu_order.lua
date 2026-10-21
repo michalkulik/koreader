@@ -206,6 +206,18 @@ local order = {
     }
 }
 
+-- On Kindle, put the sleep screen settings in Settings -> Device, where Kindle
+-- users naturally look for them (instead of burying them in Settings -> Screen).
+if Device:isKindle() then
+    for i, id in ipairs(order.screen) do
+        if id == "screensaver" then
+            table.remove(order.screen, i)
+            break
+        end
+    end
+    table.insert(order.device, 1, "screensaver")
+end
+
 if not Device:hasExitOptions() then
     order.exit_menu = nil
 end
