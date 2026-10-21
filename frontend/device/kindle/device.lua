@@ -757,6 +757,20 @@ local POWERD_EVENT_SOURCES = {
 
 function Kindle:intoScreenSaver(source)
     logger.dbg("Kindle:intoScreenSaver via", POWERD_EVENT_SOURCES[source] or string.format("UNKNOWN_SUSPEND (%d)", source or -1))
+
+    -- Make sure Wi-Fi is really down before powerd suspends the device.  The generic
+    -- suspend path only does this for hasWifiManager devices, and Kindle is not one,
+    -- so without this Wi-Fi can stay powered while KOReader is asleep.
+    -- This is a non-interactive disable: wifi_was_on stays set, so auto_restore_wifi
+    -- can bring the connection back after resume.
+    if self:hasWifiToggle() then
+        local NetworkMgr = require("ui/network/manager")
+        if NetworkMgr:isWifiOn() then
+            logger.dbg("Kindle: disabling Wi-Fi before suspend")
+            NetworkMgr:disableWifi()
+        end
+    end
+
     if not self.screen_saver_mode then
         if self:supportsScreensaver() then
             -- NOTE: Meaning this is not a SO device ;)

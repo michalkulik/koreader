@@ -298,6 +298,29 @@ local sub_item_table = {
     },
 }
 
+-- Kindle 10 / KT4: make the native-style cover sleep screen a one-tap option.
+-- The generic "Wallpaper" submenu below remains available for all other modes.
+if Device:isKindle() then
+    table.insert(sub_item_table, 1, {
+        text = _("Show current book cover instead of the sleep message"),
+        help_text = _("Uses the cover of the last opened book as the sleep screen, like the native Kindle reader, and hides the 'Sleeping' message. Kindle only."),
+        enabled_func = hasLastFile,
+        checked_func = function()
+            return G_reader_settings:readSetting("screensaver_type") == "cover"
+        end,
+        callback = function()
+            if G_reader_settings:readSetting("screensaver_type") == "cover" then
+                G_reader_settings:saveSetting("screensaver_type", "disable")
+                G_reader_settings:makeTrue("screensaver_show_message")
+            else
+                G_reader_settings:saveSetting("screensaver_type", "cover")
+                G_reader_settings:makeFalse("screensaver_show_message")
+            end
+        end,
+        separator = true,
+    })
+end
+
 if ui.document then
     table.insert(sub_item_table, {
         text = _("Do not show this book cover on sleep screen"),
