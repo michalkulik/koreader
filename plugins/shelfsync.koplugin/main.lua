@@ -2201,9 +2201,24 @@ end
 function ShelfSync:scheduleResumeSync(delay)
     if not self:isLoggedIn() or self.resume_sync_scheduled then return end
     self.resume_sync_scheduled = true
-    UIManager:scheduleIn(delay or 2, function()
+    local attempt = 0
+    local function try_sync()
+        if not self:isLoggedIn() then
+            self.resume_sync_scheduled = nil
+            return
+        end
+        -- Wi-Fi restore after suspend can take several seconds.  Keep waiting
+        -- for it instead of silently skipping the wake-up sync.
+        if not NetworkMgr:isOnline() then
+            attempt = attempt + 1
+            if attempt < 20 then
+                UIManager:scheduleIn(2, try_sync)
+            else
+                self.resume_sync_scheduled = nil
+            end
+            return
+        end
         self.resume_sync_scheduled = nil
-        if not self:isLoggedIn() or not NetworkMgr:isOnline() then return end
         if self.progress_pull_pending then return end
         self:cancelProgressPush()
         local result
@@ -2215,7 +2230,8 @@ function ShelfSync:scheduleResumeSync(delay)
         if result ~= "asked" then
             self:flushQueue(false)
         end
-    end)
+    end
+    UIManager:scheduleIn(delay or 2, try_sync)
 end
 
 function ShelfSync:onNetworkConnected()
