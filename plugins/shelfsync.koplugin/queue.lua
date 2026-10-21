@@ -4,6 +4,7 @@ Persistent offline queue for ShelfSync.
 Items:
   { kind = "upload",   path, partial_md5, size, filename, title, authors }
   { kind = "progress", path, book_id, position, percentage, base_rev }
+  { kind = "delete",   path, book_id, filename, title }
 ]]
 
 local LuaSettings = require("luasettings")
@@ -40,7 +41,10 @@ end
 
 function Queue:add(item)
     for i, existing in ipairs(self.items) do
-        if existing.kind == item.kind and existing.path == item.path then
+        local same_item = existing.kind == item.kind
+            and ((item.path ~= nil and existing.path == item.path)
+                or (item.kind == "delete" and item.book_id and existing.book_id == item.book_id))
+        if same_item then
             item.attempts = existing.attempts or 0
             item.queued_at = existing.queued_at or os.time()
             item.last_error = existing.last_error
@@ -76,6 +80,20 @@ function Queue:remove_by_key(kind, path)
         end
     end
     return false
+end
+
+--- Drop pending work for a book that is being deleted from the shelf.
+function Queue:remove_for_book(book_id, path)
+    local kept = {}
+    for _, item in ipairs(self.items) do
+        local same_book = book_id and item.book_id == book_id
+        local same_path = path and item.path == path
+        if not (same_book or same_path) then
+            table.insert(kept, item)
+        end
+    end
+    self.items = kept
+    self:save()
 end
 
 function Queue:fail(item, error)

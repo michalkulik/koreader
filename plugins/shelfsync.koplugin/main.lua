@@ -1039,6 +1039,8 @@ function ShelfSync:flushQueue(interactive)
                 if ok then uploads = uploads + 1 end
             elseif item.kind == "progress" then
                 ok, err = self:doProgress(item, false)
+            elseif item.kind == "delete" then
+                ok, err = self:deleteRemoteBook(item.book_id)
             end
             if ok then
                 self.queue:remove(item)
@@ -1507,6 +1509,11 @@ function ShelfSync:showBookActions(book)
         text = _("Details"),
         callback = function() self:showBookDetails(book, path) end,
     })
+    table.insert(items, {
+        text = _("Delete from shelf"),
+        callback = function() self:deleteBook(book) end,
+        separator = true,
+    })
     local actions_menu = Menu:new{
         title = self:bookTitle(book),
         item_table = items,
@@ -1531,6 +1538,94 @@ function ShelfSync:removeLocalCopy(book, path)
             self.index:remove(path)
             self:showInfo(_("Local copy removed."), 3)
         end,
+    })
+end
+
+function ShelfSync:deleteRemoteBook(book_id)
+    if not book_id then return nil, "missing book id" end
+    local data, code, err = self.client:delete_book(book_id)
+    if data or code == 404 then
+        return true
+    end
+    if code == 401 then
+        return nil, "unauthorized"
+    end
+    return nil, err or code
+end
+
+function ShelfSync:removeBookLocalState(book)
+    local path = self.index:find_by_book_id(book.id)
+    local entry = path and self.index:get(path)
+    if path then
+        -- Only remove files downloaded by ShelfSync.  A book uploaded from
+        -- this device is the user's own file and should remain in the file
+        -- manager after the shelf entry is deleted.
+        if entry and entry.downloaded then
+            os.remove(path)
+        end
+        self.index:remove(path)
+    end
+
+    local kept = {}
+    for _, item in ipairs(self.library or {}) do
+        if item.id ~= book.id then
+            table.insert(kept, item)
+        end
+    end
+    self.library = kept
+    self.settings:saveSetting("library_cache", kept)
+    self.settings:saveSetting("library_time", os.time())
+    if self.last_opened then
+        self.last_opened["id:" .. book.id] = nil
+        if book.partial_md5 then
+            self.last_opened["md5:" .. book.partial_md5] = nil
+        end
+        self.settings:saveSetting("last_opened", self.last_opened)
+    end
+    self.settings:flush()
+
+    local cover = self:coverPath(book)
+    if cover then
+        os.remove(cover)
+    end
+    self.cover_failures[book.id] = nil
+    self.queue:remove_for_book(book.id, path)
+end
+
+function ShelfSync:deleteBookNow(book)
+    self:reloadFromDisk()
+    local path = self.index:find_by_book_id(book.id)
+    self:removeBookLocalState(book)
+    local item = {
+        kind = "delete",
+        book_id = book.id,
+        path = path,
+        filename = book.filename,
+        title = book.title,
+    }
+    local ok, err
+    if NetworkMgr:isOnline() and self:isLoggedIn() then
+        ok, err = self:deleteRemoteBook(book.id)
+    end
+    if ok then
+        self:showInfo(_("Book deleted from the shelf."), 3)
+    else
+        self.queue:add(item)
+        if err == "unauthorized" then
+            self:handleError(401, nil, _("delete"))
+        else
+            self:showInfo(_("Delete queued; it will be sent on the next sync."), 5)
+        end
+    end
+    self:showShelf()
+end
+
+function ShelfSync:deleteBook(book)
+    UIManager:show(ConfirmBox:new{
+        text = T(_("Delete \"%1\" from the shelf on all devices?\n\nA local copy downloaded from the shelf will also be deleted on this device."),
+            self:bookTitle(book)),
+        ok_text = _("Delete"),
+        ok_callback = function() self:deleteBookNow(book) end,
     })
 end
 
