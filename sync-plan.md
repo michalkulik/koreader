@@ -405,9 +405,10 @@ i dołącza `tools/release-android.sh` (albo ręcznie `gh release upload --clobb
   sumy kontrolnej to przyszły krok.
 - Wpisy „Update server” pokazują teraz wyłącznie feed forka; stary zapisany serwer
   upstream jest migrowany automatycznie w `getOTAServer()`.
-- Kindle: KOReader używa `kotasync` i modelu `kindlepw2`. Dla aktualizacji
-  z forka trzeba publikować `koreader-kindlepw2-latest-stable.kotasync` +
-  `update.tar.xz`; inaczej ręczne kopiowanie (etap 6/7 dla Kindle).
+- Kindle: KOReader używa `kotasync`. **Kindle 10 / KT4 ma model `kindlehf`**
+  (nie `kindlepw2`); `kindlepw2` dotyczy tylko starszych Kindle. Dla OTA trzeba
+  publikować `koreader-kindlehf-latest-stable.kotasync` + `koreader-kindlehf-<wersja>.tar.xz`.
+  Robi to `tools/release-kindle-ota.sh --version vYYYY.MM` (domyślnie `kindlehf`).
 - Każda aktualizacja podpisana tym samym kluczem `koreader-release.jks`
   (PackageInstaller odrzuci inny podpis). Klucz i `credentials.txt` w backupie.
 
@@ -613,7 +614,7 @@ serwer: `koreader-server/app/covers.py`, `app/main.py`, testy.
 - zbudowany `koreader-kindlepw2-v2026.17.zip` (target `kindlepw2`, ARM,
   `koreader/` + `extensions/`), z tą samą wtyczką i widokiem startowym,
 - instalacja przez rozpakowanie do katalogu głównego Kindla,
-- OTA dla Kindle (`kotasync` + `update.tar.xz`) nadal do etapu 6.
+- OTA dla Kindle (`kotasync` + `update.tar.xz`) — `kindlehf` dla KT4, publikowane przez `tools/release-kindle-ota.sh`.
 
 **Testy:**
 - serwer: 9 testów `pytest` (w tym okładka EPUB i brak okładki),
