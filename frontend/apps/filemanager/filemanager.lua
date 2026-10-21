@@ -404,7 +404,6 @@ function FileManager:init()
     self.active_widgets = {}
     self.postInitCallback = {}
 
-    self:registerModule("screenclock", ScreenClockListener:new{ ui = self })
     self:registerModule("screenshot", Screenshoter:new{
         prefix = "FileManager",
         ui = self,
@@ -437,6 +436,7 @@ function FileManager:init()
     end
 
     self:setupLayout()
+    self:registerModule("screenclock", ScreenClockListener:new{ ui = self })
     ScreenClock:attach(self)
     self:initGesListener()
     self:handleEvent(Event:new("SetDimensions", self.dimen))

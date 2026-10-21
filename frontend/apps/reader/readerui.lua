@@ -150,10 +150,6 @@ function ReaderUI:init()
 
     self:registerKeyEvents()
 
-    -- Clock overlay must see rotation events before ReaderView consumes them;
-    -- it returns false so the normal rotation handling still runs.
-    self:registerModule("screenclock", ScreenClockListener:new{ ui = self })
-
     -- a view container (so it must be child #1!)
     -- all paintable widgets need to be a child of reader view
     self:registerModule("view", ReaderView:new{
@@ -163,6 +159,7 @@ function ReaderUI:init()
         document = self.document,
     })
     ScreenClock:attach(self)
+    self:registerModule("screenclock", ScreenClockListener:new{ ui = self })
     -- goto link controller
     self:registerModule("link", ReaderLink:new{
         dialog = self.dialog,
