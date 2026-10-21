@@ -909,11 +909,15 @@ function ShelfSync:pullProgress(interactive)
             math.floor((book.progress.percentage or 0) * 100)))
     end
 
-    -- A book just downloaded from the shelf has no local reading state.  In
-    -- that case jumping straight to the server position is expected and does
-    -- not need another confirmation prompt.
+    -- A book managed by the shelf should follow the server position: a fresh
+    -- download has no local reading state, and for an existing download the
+    -- server may have a newer position from another device.  (The local-ahead
+    -- branch above already covers the opposite direction.)
     local fresh_download = entry.downloaded and not entry.last_rev
-    if interactive or fresh_download then
+    local server_ahead = entry.downloaded and book.progress.percentage
+        and current_percentage
+        and book.progress.percentage > current_percentage + 0.005
+    if interactive or fresh_download or server_ahead then
         apply()
         return finish(true)
     end
