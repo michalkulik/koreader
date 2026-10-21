@@ -912,7 +912,7 @@ function ShelfSync:pushProgress(interactive)
     end
 end
 
-function ShelfSync:pullProgress(interactive, allow_prompt)
+function ShelfSync:pullProgress(interactive, wake)
     if not self:isLoggedIn() then
         self.progress_pull_pending = false
         return nil
@@ -920,7 +920,7 @@ function ShelfSync:pullProgress(interactive, allow_prompt)
     if not NetworkMgr:isOnline() then
         self.progress_pull_pending = false
         if interactive then
-            NetworkMgr:willRerunWhenOnline(function() self:pullProgress(true, allow_prompt) end)
+            NetworkMgr:willRerunWhenOnline(function() self:pullProgress(true, wake) end)
         end
         return nil
     end
@@ -980,6 +980,37 @@ function ShelfSync:pullProgress(interactive, allow_prompt)
         })
     end
 
+    -- After wake-up, always ask, even when the server position is behind this
+    -- device.  The user explicitly requested a visible, bidirectional sync.
+    if wake then
+        local function apply_wake()
+            logger.info("ShelfSync: applying wake-up progress", book.progress.rev,
+                book.progress.position, book.progress.percentage,
+                "local:", current_position, current_percentage)
+            self.queue:remove_by_key("progress", meta.file)
+            self:gotoPosition(book.progress.position, book.progress.percentage)
+            remember()
+            self:showInfo(T(_("Moved to %1% from another device."),
+                math.floor((book.progress.percentage or 0) * 100)))
+        end
+        local server_percent = math.floor((book.progress.percentage or 0) * 100)
+        local local_percent = current_percentage and math.floor(current_percentage * 100) or 0
+        UIManager:show(ConfirmBox:new{
+            text = T(_("Synchronize reading position after wake-up?\n\nServer: %1%\nThis device: %2%"),
+                server_percent, local_percent),
+            ok_text = _("Synchronize"),
+            ok_callback = function()
+                apply_wake()
+                finish("applied")
+                self:flushQueue(false)
+            end,
+            cancel_callback = function()
+                finish("cancelled")
+            end,
+        })
+        return "asked"
+    end
+
     -- If this device is further into the book than the server (for example
     -- after the server was accidentally overwritten with page one), do not
     -- pull the reader backwards. Keep the local position and send it back.
@@ -1010,18 +1041,9 @@ function ShelfSync:pullProgress(interactive, allow_prompt)
     -- direction, so this never moves the reader backwards.
     local server_ahead = book.progress.percentage and current_percentage
         and book.progress.percentage > current_percentage + 0.005
-    local server_newer = (book.progress.rev or 0) > (entry.last_rev or 0)
-    local server_not_behind = not current_percentage or not book.progress.percentage
-        or book.progress.percentage >= current_percentage
-    if interactive or server_ahead
-        or (allow_prompt == false and server_newer and server_not_behind) then
+    if interactive or server_ahead then
         apply()
         return finish(true)
-    end
-    if allow_prompt == false then
-        -- Wake-up sync is silent: do not pop a confirmation dialog while the
-        -- reader is restoring.  The next page change will push if local is ahead.
-        return finish("server-behind")
     end
 
     UIManager:show(ConfirmBox:new{
@@ -2180,11 +2202,17 @@ function ShelfSync:scheduleResumeSync(delay)
     UIManager:scheduleIn(delay or 2, function()
         self.resume_sync_scheduled = nil
         if not self:isLoggedIn() or not NetworkMgr:isOnline() then return end
+        if self.progress_pull_pending then return end
         self:cancelProgressPush()
+        local result
         if self.auto_progress then
-            self:pullProgress(false, false)
+            result = self:pullProgress(false, true)
         end
-        self:flushQueue(false)
+        -- If a confirmation dialog is waiting for the user, do not flush a
+        -- queued old position underneath it.
+        if result ~= "asked" then
+            self:flushQueue(false)
+        end
     end)
 end
 

@@ -104,3 +104,5 @@ if [[ "${no_upload}" -eq 0 ]]; then
     echo "OTA manifest:"
     echo "  https://github.com/${repo}/releases/latest/download/$(basename "${latest}")"
 fi
+
+./tools/cleanup-built-releases.sh --version "${version}"
