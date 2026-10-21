@@ -105,4 +105,4 @@ if [[ "${no_upload}" -eq 0 ]]; then
     echo "  https://github.com/${repo}/releases/latest/download/$(basename "${latest}")"
 fi
 
-./tools/cleanup-built-releases.sh --version "${version}"
+./tools/cleanup-built-releases.sh --version "${version}" --tmp

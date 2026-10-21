@@ -135,4 +135,4 @@ echo
 echo "OTA manifest:"
 echo "  https://github.com/${repo}/releases/latest/download/koreader-android-arm64-latest-stable"
 echo
-"${root_dir}/tools/cleanup-built-releases.sh" --version "${version}"
+"${root_dir}/tools/cleanup-built-releases.sh" --version "${version}" --tmp
