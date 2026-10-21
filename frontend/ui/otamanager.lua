@@ -254,6 +254,37 @@ function OTAManager:fetchAndProcessUpdate()
     end
     local re = function(res) coroutine.resume(co, res) end
 
+    -- Make the Wi-Fi requirement explicit instead of silently falling through
+    -- to a generic "Connection failed" from the network backend.
+    if Device:hasWifiToggle() and not NetworkMgr:isWifiOn() then
+        if not co_confirm(_("Wi-Fi is off. Turn it on to check for updates?"),
+            _("Turn on")) then
+            return
+        end
+        local wifi_co = coroutine.running()
+        local wifi_done = false
+        local wifi_connected = false
+        local function wifi_finished(ok)
+            if wifi_done then return end
+            wifi_done = true
+            wifi_connected = ok
+            coroutine.resume(wifi_co)
+        end
+        NetworkMgr:toggleWifiOn(function()
+            wifi_finished(NetworkMgr:isConnected())
+        end, nil, true)
+        -- toggleWifiOn's callback only runs on success; do not hang forever
+        -- when the network is unreachable.
+        UIManager:scheduleIn(50, function() wifi_finished(false) end)
+        coroutine.yield()
+        if not wifi_connected then
+            UIManager:show(InfoMessage:new{
+                text = _("Could not connect to Wi-Fi. Check the network and try again."),
+            })
+            return
+        end
+    end
+
     -- Ensure network is online.
     if NetworkMgr:willRerunWhenConnected(re) then
         coroutine.yield()
