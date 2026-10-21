@@ -190,6 +190,8 @@ function NetworkMgr:isConnected()
     end
 end
 function NetworkMgr:getNetworkInterfaceName() end
+-- Current signal quality as a 0-100 percentage, when the platform can report it.
+function NetworkMgr:getWifiSignalQuality() return nil end
 function NetworkMgr:getConfiguredNetworks() end -- From the *backend*, e.g., wpa_cli list_networks (as opposed to `getAllSavedNetworks`)
 function NetworkMgr:getNetworkList() end
 function NetworkMgr:getCurrentNetwork() end

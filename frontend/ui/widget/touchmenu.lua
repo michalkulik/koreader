@@ -40,6 +40,30 @@ local Screen = Device.screen
 
 local DGENERIC_ICON_SIZE = G_defaults:readSetting("DGENERIC_ICON_SIZE")
 
+-- Kindle only: pick a Wi-Fi icon that reflects both the radio state and the
+-- current signal strength, next to the clock and battery in the menu footer.
+local function getWifiIconName()
+    if not Device:isKindle() then return nil end
+    local NetworkMgr = require("ui/network/manager")
+    if NetworkMgr:isWifiOn() == false then
+        return "wifi.off"
+    end
+    local quality = NetworkMgr:getWifiSignalQuality() or 0
+    local level
+    if quality > 80 then
+        level = 100
+    elseif quality > 55 then
+        level = 75
+    elseif quality > 30 then
+        level = 50
+    elseif quality > 5 then
+        level = 25
+    else
+        level = 0
+    end
+    return "wifi.open." .. level
+end
+
 --[[
 TouchMenuItem widget
 --]]
@@ -597,11 +621,23 @@ function TouchMenu:init()
         bordersize = 0,
         show_parent = self.show_parent,
     }
-    self.device_info = HorizontalGroup:new{
-        self.time_info,
-        -- Add some span to balance up_button image included padding
-        HorizontalSpan:new{width = Size.span.horizontal_default},
+    self.wifi_info = Button:new{
+        icon = "wifi.off",
+        icon_width = Screen:scaleBySize(24),
+        icon_height = Screen:scaleBySize(24),
+        bordersize = 0,
+        padding = 0,
+        show_parent = self.show_parent,
     }
+    local device_info_items = {}
+    if Device:isKindle() then
+        table.insert(device_info_items, self.wifi_info)
+        table.insert(device_info_items, HorizontalSpan:new{width = Size.span.horizontal_default})
+    end
+    table.insert(device_info_items, self.time_info)
+    -- Add some span to balance up_button image included padding
+    table.insert(device_info_items, HorizontalSpan:new{width = Size.span.horizontal_default})
+    self.device_info = HorizontalGroup:new(device_info_items)
     local footer_width = self.width - self.padding*2
     local up_button = IconButton:new{
         icon = "chevron.up",
@@ -746,6 +782,9 @@ function TouchMenu:updateItems(target_page, target_item_id)
         end
     end
     self.time_info:setText(time_info_txt)
+    if self.wifi_info and Device:isKindle() then
+        self.wifi_info:setIcon(getWifiIconName())
+    end
 
     -- recalculate dimen based on new layout
     local old_dimen = self.dimen:copy()

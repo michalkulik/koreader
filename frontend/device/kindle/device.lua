@@ -322,6 +322,39 @@ local function isWifiUp()
     return nil
 end
 
+-- Current Wi-Fi signal quality as a 0-100 percentage, for the menu status icon.
+-- wifid exposes it as e.g. "4/5"; /proc/net/wireless is the fallback.
+local function wifiSignalQuality()
+    local haslipc, lipc = pcall(require, "liblipclua")
+    if haslipc then
+        local lipc_handle = lipc.init("com.github.koreader.networkmgr")
+        if lipc_handle then
+            local strength = lipc_handle:get_string_property("com.lab126.wifid", "signalStrength")
+            lipc_handle:close()
+            if strength then
+                local level, maximum = strength:match("(%d+)%s*/%s*(%d+)")
+                if level and tonumber(maximum) and tonumber(maximum) > 0 then
+                    return math.floor(tonumber(level) * 100 / tonumber(maximum))
+                end
+            end
+        end
+    end
+
+    local file = io.open("/proc/net/wireless", "re")
+    if file then
+        for line in file:lines() do
+            local interface, quality = line:match("^%s*(%S+):%s+%S+%s+(%d+)")
+            if interface == "wlan0" then
+                file:close()
+                return tonumber(quality)
+            end
+        end
+        file:close()
+    end
+
+    return nil
+end
+
 --[[
 Test if a kindle device is flagged as a Special Offers device (i.e., ad supported) (FW >= 5.x)
 --]]
@@ -533,6 +566,9 @@ function Kindle:initNetworkManager(NetworkMgr)
         -- An IP address or an operational interface is not enough: after
         -- wifid powered the radio down they may linger for a while.
         return self:isWifiOn() and self:ifHasAnAddress()
+    end
+    NetworkMgr.getWifiSignalQuality = function()
+        return wifiSignalQuality()
     end
 end
 
