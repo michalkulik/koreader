@@ -104,6 +104,7 @@ function NetworkMgr:connectivityCheck(iter, callback, widget)
         local nw = self:getCurrentNetwork()
         if nw and nw.ssid then
             self.lease_ssid = nw.ssid
+            self.last_ssid = nw.ssid
             logger.dbg("NetworkMgr: lease_ssid set to", nw.ssid, "after async restore")
         end
         UIManager:broadcastEvent(Event:new("NetworkConnected"))
@@ -150,6 +151,8 @@ function NetworkMgr:init()
     self.wifi_was_on = G_reader_settings:isTrue("wifi_was_on")
     -- Trigger an initial NetworkConnected event if WiFi was already up when we were launched
     if self.is_connected then
+        local nw = self:getCurrentNetwork()
+        if nw and nw.ssid then self.last_ssid = nw.ssid end
         -- NOTE: This needs to be delayed because we run on require, while NetworkListener gets spun up sliiightly later on FM/ReaderUI init...
         UIManager:nextTick(UIManager.broadcastEvent, UIManager, Event:new("NetworkConnected"))
     else
@@ -1226,6 +1229,7 @@ function NetworkMgr:reconnectOrShowNetworkMenu(complete_callback, interactive)
         -- Record the SSID we just obtained a lease for, so hasLeaseForCurrentNetwork()
         -- can detect a future network switch without triggering unnecessary re-DHCPs (#14790).
         self.lease_ssid = ssid
+        self.last_ssid = ssid
         logger.dbg("NetworkMgr: lease_ssid set to", ssid)
         if complete_callback then
             complete_callback()

@@ -492,7 +492,7 @@ function Kindle:initNetworkManager(NetworkMgr)
         -- up without re-associating with the previous network.  Explicitly ask
         -- it to reconnect to the SSID we were using before suspend, with a few
         -- retries while DHCP comes up.
-        local ssid = self.wifi_ssid_before_suspend
+        local ssid = self.wifi_ssid_before_suspend or NetworkMgr.last_ssid
         if not ssid or ssid == "" then return end
         local attempt = 0
         local function reconnect()
@@ -833,23 +833,26 @@ function Kindle:intoScreenSaver(source)
     -- can bring the connection back after resume.
     if self:hasWifiToggle() then
         local NetworkMgr = require("ui/network/manager")
+        -- Remember the current network before disableWifi() clears the lease.
+        -- resume needs it to tell wifid which network to join.  last_ssid also
+        -- covers the case where auto_disable_wifi already powered the radio
+        -- down before we went to sleep.
+        local ssid = NetworkMgr.lease_ssid or NetworkMgr.last_ssid
+        if not ssid then
+            local nw = NetworkMgr:getCurrentNetwork()
+            ssid = nw and nw.ssid or nil
+        end
+        if ssid and ssid ~= "" then
+            self.wifi_ssid_before_suspend = ssid
+        elseif not NetworkMgr.wifi_was_on then
+            -- Wi-Fi was explicitly disabled by the user; do not turn it back
+            -- on after resume.
+            self.wifi_ssid_before_suspend = nil
+        end
+
         if NetworkMgr:isWifiOn() then
-            -- Remember the current network before disableWifi() clears the
-            -- lease.  resume needs it to tell wifid which network to join.
-            local ssid = NetworkMgr.lease_ssid
-            if not ssid then
-                local nw = NetworkMgr:getCurrentNetwork()
-                ssid = nw and nw.ssid or nil
-            end
-            if ssid and ssid ~= "" then
-                self.wifi_ssid_before_suspend = ssid
-            end
             logger.dbg("Kindle: disabling Wi-Fi before suspend")
             NetworkMgr:disableWifi()
-        else
-            -- Wi-Fi was already off (e.g. the user disabled it explicitly);
-            -- do not turn it back on after resume.
-            self.wifi_ssid_before_suspend = nil
         end
     end
 
@@ -931,9 +934,9 @@ function Kindle:outofScreenSaver(source)
 
     -- NetworkListener:onResume normally does this, but make sure a sleep-time
     -- Wi-Fi disable is always undone when the user asked for auto-restore.
-    if self.wifi_ssid_before_suspend and G_reader_settings:isTrue("auto_restore_wifi") then
+    if G_reader_settings:isTrue("auto_restore_wifi") then
         local NetworkMgr = require("ui/network/manager")
-        if not NetworkMgr:isWifiOn() then
+        if NetworkMgr.wifi_was_on and not NetworkMgr:isWifiOn() then
             logger.dbg("Kindle: restoring Wi-Fi after resume")
             NetworkMgr:restoreWifiAsync()
             NetworkMgr:scheduleConnectivityCheck()
