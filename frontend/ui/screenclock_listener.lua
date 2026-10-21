@@ -4,6 +4,10 @@ local UIManager = require("ui/uimanager")
 
 local ScreenClockListener = EventListener:extend{}
 
+function ScreenClockListener:init()
+    if self.ui then ScreenClock:setHost(self.ui) end
+end
+
 function ScreenClockListener:onResume()
     ScreenClock:refresh(true)
 end

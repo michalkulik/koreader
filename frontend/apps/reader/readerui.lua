@@ -151,7 +151,7 @@ function ReaderUI:init()
 
     -- Clock overlay must see rotation events before ReaderView consumes them;
     -- it returns false so the normal rotation handling still runs.
-    self:registerModule("screenclock", ScreenClockListener:new{})
+    self:registerModule("screenclock", ScreenClockListener:new{ ui = self })
 
     -- a view container (so it must be child #1!)
     -- all paintable widgets need to be a child of reader view
@@ -800,7 +800,7 @@ function ReaderUI:doShowReader(file, provider, seamless)
     end
 
     UIManager:show(reader, seamless and "ui" or "full")
-    require("ui/widget/screenclock"):show(true)
+    require("ui/widget/screenclock"):show(reader, true)
 end
 
 function ReaderUI:unlockDocumentWithPassword(document, try_again)

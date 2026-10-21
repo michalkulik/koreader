@@ -1,50 +1,71 @@
 --[[--
 Small always-on-top clock in the top-right corner of the screen.
 
-The overlay is deliberately a plain Widget: it does not consume input events,
-so taps still reach the reader/file manager underneath it.
+The overlay is a toast: it never steals input from the reader/file manager
+underneath it. It is only painted while its host UI is the topmost window, so
+menus, dialogs and the screensaver naturally cover it.
 ]]
 
 local Blitbuffer = require("ffi/blitbuffer")
+local CenterContainer = require("ui/widget/container/centercontainer")
 local Font = require("ui/font")
+local FrameContainer = require("ui/widget/container/framecontainer")
 local Geom = require("ui/geometry")
 local Screen = require("device").screen
 local TextWidget = require("ui/widget/textwidget")
 local UIManager = require("ui/uimanager")
-local Widget = require("ui/widget/widget")
 local datetime = require("datetime")
+local logger = require("logger")
 
-local ClockWidget = Widget:extend{
+local ClockWidget = FrameContainer:extend{
+    toast = true,
     covers_fullscreen = false,
-    disable_double_tap = G_reader_settings:nilOrTrue("disable_double_tap"),
+    bordersize = 0,
+    margin = 0,
+    background = Blitbuffer.COLOR_WHITE,
     padding = Screen:scaleBySize(3),
-    margin = Screen:scaleBySize(3),
-    fgcolor = Blitbuffer.COLOR_BLACK,
-    bgcolor = Blitbuffer.COLOR_WHITE,
 }
+
+local function host_is_top(host)
+    for i = #UIManager._window_stack, 1, -1 do
+        local widget = UIManager._window_stack[i].widget
+        if not widget.toast then
+            return widget == host
+        end
+    end
+    return false
+end
 
 function ClockWidget:init()
     self.disable_double_tap = G_reader_settings:nilOrTrue("disable_double_tap")
     self.face = Font:getFace("cfont", Screen:scaleBySize(14))
 
-    -- Keep the overlay width stable across 9:59 -> 10:00 so the erased area
-    -- is always exactly the same rectangle.
+    -- Keep the overlay width stable across 9:59 -> 10:00 and across 12-hour
+    -- AM/PM strings.
     local probe = TextWidget:new{ text = "88:88 WWW", face = self.face, padding = 0 }
     local probe_size = probe:getSize()
     probe:free()
-    self.dimen = Geom:new{
-        x = 0,
-        y = 0,
-        w = probe_size.w + 2 * self.padding,
-        h = probe_size.h + 2 * self.padding,
-    }
-    self:_reposition()
-    self:updateTime()
-end
 
-function ClockWidget:_reposition()
-    self.dimen.x = Screen:getWidth() - self.dimen.w - self.margin
-    self.dimen.y = self.margin
+    self.width = probe_size.w + 2 * self.padding
+    self.height = probe_size.h + 2 * self.padding
+    self.dimen = Geom:new{ x = 0, y = 0, w = self.width, h = self.height }
+
+    self.text_widget = TextWidget:new{
+        text = "",
+        face = self.face,
+        fgcolor = Blitbuffer.COLOR_BLACK,
+        padding = 0,
+    }
+    self[1] = CenterContainer:new{
+        dimen = Geom:new{
+            x = 0,
+            y = 0,
+            w = self.width - 2 * self.padding,
+            h = self.height - 2 * self.padding,
+        },
+        self.text_widget,
+    }
+    self:updateTime()
 end
 
 function ClockWidget:updateTime()
@@ -52,49 +73,32 @@ function ClockWidget:updateTime()
         G_reader_settings:isTrue("twelve_hour_clock"))
     if text == self.text then return false end
     self.text = text
-    if self.text_widget then self.text_widget:free() end
-    self.text_widget = TextWidget:new{
-        text = text,
-        face = self.face,
-        fgcolor = self.fgcolor,
-        padding = 0,
-    }
-    self._text_size = self.text_widget:getSize()
+    self.text_widget:setText(text)
     return true
 end
 
 function ClockWidget:paintTo(bb, x, y)
-    if not self.text_widget then self:updateTime() end
-    local w, h = self.dimen.w, self.dimen.h
-    if not self._bb or self._bb:getWidth() ~= w or self._bb:getHeight() ~= h
-        or self._bb:getType() ~= bb:getType() then
-        if self._bb then self._bb:free() end
-        self._bb = Blitbuffer.new(w, h, bb:getType())
-    end
-    self._bb:fill(self.bgcolor)
-    self.text_widget:paintTo(self._bb,
-        math.floor((w - self._text_size.w) / 2),
-        math.floor((h - self._text_size.h) / 2))
-    bb:blitFrom(self._bb, self.dimen.x + x, self.dimen.y + y)
-end
-
-function ClockWidget:free()
-    if self._bb then
-        self._bb:free()
-        self._bb = nil
-    end
-    if self.text_widget then
-        self.text_widget:free()
-        self.text_widget = nil
+    if self._paint_failed then return end
+    if self.host and not host_is_top(self.host) then return end
+    local ok, err = pcall(FrameContainer.paintTo, self, bb, x, y)
+    if not ok then
+        self._paint_failed = true
+        logger.err("ScreenClock: paint failed:", err)
     end
 end
 
 local ScreenClock = {
     widget = nil,
+    host = nil,
 }
 
 function ScreenClock:isEnabled()
     return G_reader_settings:isTrue("screen_clock")
+end
+
+function ScreenClock:setHost(host)
+    self.host = host
+    if self.widget then self.widget.host = host end
 end
 
 function ScreenClock:_schedule()
@@ -107,18 +111,25 @@ function ScreenClock:_tick()
     self:refresh()
 end
 
+function ScreenClock:position()
+    local w = self.widget
+    return Screen:getWidth() - w.width - w.padding,
+        w.padding
+end
+
 function ScreenClock:refresh(force)
     if not self:isEnabled() then
         self:hide()
         return
     end
     if not self.widget then
-        self.widget = ClockWidget:new{}
-        UIManager:show(self.widget, "ui", self.widget.dimen)
+        self:show(self.host)
     else
         local changed = self.widget:updateTime()
         if changed or force then
-            UIManager:setDirty(self.widget, "ui", self.widget.dimen)
+            local x, y = self:position()
+            local region = Geom:new{ x = x, y = y, w = self.widget.width, h = self.widget.height }
+            UIManager:setDirty(self.widget, "ui", region)
         end
     end
     self:_schedule()
@@ -126,11 +137,15 @@ end
 
 function ScreenClock:refreshLayout()
     if not self.widget then return end
-    self.widget:_reposition()
-    UIManager:setDirty(self.widget, "ui", self.widget.dimen)
+    local x, y = self:position()
+    UIManager:close(self.widget, "ui", self.widget.dimen)
+    self.widget.host = self.host
+    UIManager:show(self.widget, "ui",
+        Geom:new{ x = x, y = y, w = self.widget.width, h = self.widget.height }, x, y)
 end
 
-function ScreenClock:show(raise)
+function ScreenClock:show(host, raise)
+    if host then self.host = host end
     if not self:isEnabled() then
         self:hide()
         return
@@ -142,10 +157,18 @@ function ScreenClock:show(raise)
         old:free()
     end
     if self.widget then
+        self.widget.host = self.host
         self:refresh()
     else
-        self.widget = ClockWidget:new{}
-        UIManager:show(self.widget, "ui", self.widget.dimen)
+        local ok, widget = pcall(ClockWidget.new, ClockWidget, { host = self.host })
+        if not ok then
+            logger.err("ScreenClock: creation failed:", widget)
+            return
+        end
+        self.widget = widget
+        local x, y = self:position()
+        UIManager:show(self.widget, "ui",
+            Geom:new{ x = x, y = y, w = self.widget.width, h = self.widget.height }, x, y)
         self:_schedule()
     end
 end

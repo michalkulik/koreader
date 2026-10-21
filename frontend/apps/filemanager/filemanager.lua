@@ -397,7 +397,7 @@ function FileManager:init()
     self.active_widgets = {}
     self.postInitCallback = {}
 
-    self:registerModule("screenclock", ScreenClockListener:new{})
+    self:registerModule("screenclock", ScreenClockListener:new{ ui = self })
     self:registerModule("screenshot", Screenshoter:new{
         prefix = "FileManager",
         ui = self,
@@ -1328,7 +1328,7 @@ function FileManager:showFiles(path, focused_file, selected_files)
         selected_files = selected_files,
     }
     UIManager:show(file_manager)
-    require("ui/widget/screenclock"):show(true)
+    require("ui/widget/screenclock"):show(file_manager, true)
 end
 
 --- A shortcut to execute mv.
