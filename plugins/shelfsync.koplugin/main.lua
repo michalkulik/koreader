@@ -912,7 +912,7 @@ function ShelfSync:pushProgress(interactive)
     end
 end
 
-function ShelfSync:pullProgress(interactive)
+function ShelfSync:pullProgress(interactive, allow_prompt)
     if not self:isLoggedIn() then
         self.progress_pull_pending = false
         return nil
@@ -920,7 +920,7 @@ function ShelfSync:pullProgress(interactive)
     if not NetworkMgr:isOnline() then
         self.progress_pull_pending = false
         if interactive then
-            NetworkMgr:willRerunWhenOnline(function() self:pullProgress(true) end)
+            NetworkMgr:willRerunWhenOnline(function() self:pullProgress(true, allow_prompt) end)
         end
         return nil
     end
@@ -964,6 +964,7 @@ function ShelfSync:pullProgress(interactive)
             last_position = book.progress.position,
             last_percentage = book.progress.percentage,
         })
+        self.queue:remove_by_key("progress", meta.file)
         if interactive then self:showInfo(_("Progress is already up to date.")) end
         return finish("same")
     end
@@ -986,6 +987,7 @@ function ShelfSync:pullProgress(interactive)
         and current_percentage > book.progress.percentage + 0.005 then
         remember()
         self:scheduleProgressPush(2)
+        self.queue:remove_by_key("progress", meta.file)
         if interactive then
             self:showInfo(_("Local progress is ahead; sending it to the shelf."))
         end
@@ -994,6 +996,7 @@ function ShelfSync:pullProgress(interactive)
     local function apply()
         logger.info("ShelfSync: applying server progress", book.progress.rev,
             book.progress.position, book.progress.percentage, "local:", current_position, current_percentage)
+        self.queue:remove_by_key("progress", meta.file)
         self:gotoPosition(book.progress.position, book.progress.percentage)
         remember()
         self:showInfo(T(_("Moved to %1% from another device."),
@@ -1007,9 +1010,18 @@ function ShelfSync:pullProgress(interactive)
     -- direction, so this never moves the reader backwards.
     local server_ahead = book.progress.percentage and current_percentage
         and book.progress.percentage > current_percentage + 0.005
-    if interactive or server_ahead then
+    local server_newer = (book.progress.rev or 0) > (entry.last_rev or 0)
+    local server_not_behind = not current_percentage or not book.progress.percentage
+        or book.progress.percentage >= current_percentage
+    if interactive or server_ahead
+        or (allow_prompt == false and server_newer and server_not_behind) then
         apply()
         return finish(true)
+    end
+    if allow_prompt == false then
+        -- Wake-up sync is silent: do not pop a confirmation dialog while the
+        -- reader is restoring.  The next page change will push if local is ahead.
+        return finish("server-behind")
     end
 
     UIManager:show(ConfirmBox:new{
@@ -2158,16 +2170,30 @@ function ShelfSync:onSuspend()
     end
 end
 
+-- On wake, always fetch the server position *before* sending anything from
+-- this device.  A progress item may have been queued while suspending; sending
+-- it first would overwrite a newer position read on another device while the
+-- Kindle was asleep.
+function ShelfSync:scheduleResumeSync(delay)
+    if not self:isLoggedIn() or self.resume_sync_scheduled then return end
+    self.resume_sync_scheduled = true
+    UIManager:scheduleIn(delay or 2, function()
+        self.resume_sync_scheduled = nil
+        if not self:isLoggedIn() or not NetworkMgr:isOnline() then return end
+        self:cancelProgressPush()
+        if self.auto_progress then
+            self:pullProgress(false, false)
+        end
+        self:flushQueue(false)
+    end)
+end
+
 function ShelfSync:onNetworkConnected()
-    if self:isLoggedIn() then
-        UIManager:scheduleIn(2, function() self:flushQueue(false) end)
-    end
+    self:scheduleResumeSync(2)
 end
 
 function ShelfSync:onResume()
-    if self:isLoggedIn() and NetworkMgr:isOnline() then
-        UIManager:scheduleIn(2, function() self:flushQueue(false) end)
-    end
+    self:scheduleResumeSync(2)
 end
 
 function ShelfSync:onShelfSyncNow()
