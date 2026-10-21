@@ -85,6 +85,10 @@ local function sanitize_for_storage(value)
     return clean
 end
 
+local function formatPercent(value)
+    return string.format("%.2f%%", (tonumber(value) or 0) * 100)
+end
+
 local settings_dir = DataStorage:getSettingsDir()
 
 -- Kept outside the plugin instance: opening a book replaces the current
@@ -534,7 +538,7 @@ function ShelfSync:bookSubtitle(book, local_path)
     local bits = {}
     local progress = book.progress
     if progress and tonumber(progress.percentage) then
-        table.insert(bits, T(_("%1%"), math.floor(tonumber(progress.percentage) * 100)))
+        table.insert(bits, formatPercent(progress.percentage))
     end
     if progress and tonumber(progress.updated_at) then
         table.insert(bits, self:relativeTime(progress.updated_at))
@@ -990,14 +994,13 @@ function ShelfSync:pullProgress(interactive, wake)
             self.queue:remove_by_key("progress", meta.file)
             self:gotoPosition(book.progress.position, book.progress.percentage)
             remember()
-            self:showInfo(T(_("Moved to %1% from another device."),
-                math.floor((book.progress.percentage or 0) * 100)))
+            self:showInfo(T(_("Moved to %1 from another device."),
+                formatPercent(book.progress.percentage)))
         end
-        local server_percent = math.floor((book.progress.percentage or 0) * 100)
-        local local_percent = current_percentage and math.floor(current_percentage * 100) or 0
         UIManager:show(ConfirmBox:new{
-            text = T(_("Synchronize reading position after wake-up?\n\nServer: %1%\nThis device: %2%"),
-                server_percent, local_percent),
+            text = T(_("Synchronize reading position after wake-up?\n\nServer: %1\nThis device: %2"),
+                formatPercent(book.progress.percentage),
+                current_percentage and formatPercent(current_percentage) or "?"),
             ok_text = _("Synchronize"),
             ok_callback = function()
                 apply_wake()
@@ -1030,8 +1033,8 @@ function ShelfSync:pullProgress(interactive, wake)
         self.queue:remove_by_key("progress", meta.file)
         self:gotoPosition(book.progress.position, book.progress.percentage)
         remember()
-        self:showInfo(T(_("Moved to %1% from another device."),
-            math.floor((book.progress.percentage or 0) * 100)))
+        self:showInfo(T(_("Moved to %1 from another device."),
+            formatPercent(book.progress.percentage)))
     end
 
     -- Follow the server whenever it is ahead, not only for books downloaded
@@ -1047,8 +1050,8 @@ function ShelfSync:pullProgress(interactive, wake)
     end
 
     UIManager:show(ConfirmBox:new{
-        text = T(_("Sync to position %1% from another device?"),
-            math.floor((book.progress.percentage or 0) * 100)),
+        text = T(_("Sync to position %1 from another device?"),
+            formatPercent(book.progress.percentage)),
         ok_text = _("Go"),
         ok_callback = function()
             apply()
@@ -1166,7 +1169,7 @@ function ShelfSync:bookProgress(book)
 end
 
 function ShelfSync:bookProgressLabel(book)
-    return T(_("%1%"), math.floor(self:bookProgress(book) * 100))
+    return formatPercent(self:bookProgress(book))
 end
 
 function ShelfSync:coverAuthor(book)
@@ -1399,8 +1402,7 @@ function ShelfSync:showShelfActions(shelf_menu, books)
     if continue then
         table.insert(items, {
             text = T(_("Continue reading: %1"), self:coverTitle(continue)),
-            mandatory = T(_("%1%"),
-                math.floor((continue.progress.percentage or 0) * 100)),
+            mandatory = formatPercent(continue.progress.percentage),
             callback = function()
                 close_actions()
                 self:openBook(continue)
@@ -1685,7 +1687,7 @@ function ShelfSync:showBookDetails(book, path)
         self:bookTitle(book),
         T(_("File: %1"), book.filename or "?"),
         T(_("Size: %1"), util.getFriendlySize(tonumber(book.size) or 0)),
-        T(_("Progress: %1%"), math.floor((tonumber(progress.percentage) or 0) * 100)),
+        T(_("Progress: %1"), formatPercent(progress.percentage)),
         T(_("Last progress update: %1"), self:relativeTime(progress.updated_at)),
         T(_("Local file: %1"), path or _("not downloaded")),
         T(_("Server id: %1"), book.id or "?"),
