@@ -495,13 +495,36 @@ function Kindle:initNetworkManager(NetworkMgr)
         local ssid = self.wifi_ssid_before_suspend or NetworkMgr.last_ssid
         if not ssid or ssid == "" then return end
         local attempt = 0
+        local function try_other_saved_network()
+            if NetworkMgr:isConnected() or not NetworkMgr:isWifiOn() then return end
+            logger.info("Kindle: last network unavailable, looking for another saved network")
+            local _ = require("gettext")
+            local InfoMessage = require("ui/widget/infomessage")
+            local info = InfoMessage:new{ text = _("Looking for another saved Wi-Fi network…") }
+            UIManager:show(info)
+            UIManager:forceRePaint()
+            local network_list = NetworkMgr:getNetworkList()
+            UIManager:close(info)
+            if not network_list then return end
+            for _, network in ipairs(network_list) do
+                if network.ssid and network.ssid ~= ssid and network.password then
+                    logger.info("Kindle: trying saved network", network.ssid)
+                    NetworkMgr:authenticateNetwork(network)
+                    return
+                end
+            end
+        end
         local function reconnect()
             local nw = NetworkMgr:getCurrentNetwork()
             if NetworkMgr:isConnected() and nw and nw.ssid then
                 self.wifi_ssid_before_suspend = nil
                 return
             end
-            if not NetworkMgr:isWifiOn() or attempt >= 3 then return end
+            if not NetworkMgr:isWifiOn() then return end
+            if attempt >= 3 then
+                UIManager:scheduleIn(2, try_other_saved_network)
+                return
+            end
             attempt = attempt + 1
             logger.info("Kindle: reconnecting to", ssid, "after wake (attempt", attempt, ")")
             kindleAuthenticateNetwork(ssid)
