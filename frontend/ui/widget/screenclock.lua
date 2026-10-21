@@ -6,10 +6,7 @@ file manager paints it after its normal content. This keeps input, menus and
 the screensaver completely untouched.
 ]]
 
-local Blitbuffer = require("ffi/blitbuffer")
-local CenterContainer = require("ui/widget/container/centercontainer")
 local Font = require("ui/font")
-local FrameContainer = require("ui/widget/container/framecontainer")
 local Geom = require("ui/geometry")
 local Screen = require("device").screen
 local TextWidget = require("ui/widget/textwidget")
@@ -17,58 +14,36 @@ local UIManager = require("ui/uimanager")
 local datetime = require("datetime")
 local logger = require("logger")
 
-local ClockWidget = FrameContainer:extend{
-    bordersize = 0,
-    margin = 0,
-    background = Blitbuffer.COLOR_WHITE,
+local ClockWidget = TextWidget:extend{
     padding = 3,
 }
 
 function ClockWidget:init()
     self.padding = Screen:scaleBySize(3)
     self.face = Font:getFace("cfont", Screen:scaleBySize(14))
-
-    -- Fixed size avoids ghosting when 9:59 becomes 10:00 or when switching
-    -- between 12-hour AM/PM strings.
+    self.text = datetime.secondsToHour(os.time(),
+        G_reader_settings:isTrue("twelve_hour_clock"))
     local probe = TextWidget:new{ text = "88:88 WWW", face = self.face, padding = 0 }
     local probe_size = probe:getSize()
     probe:free()
-
-    self.width = probe_size.w + 2 * self.padding
-    self.height = probe_size.h + 2 * self.padding
-    self.dimen = Geom:new{ x = 0, y = 0, w = self.width, h = self.height }
-
-    self.text_widget = TextWidget:new{
-        text = "",
-        face = self.face,
-        fgcolor = Blitbuffer.COLOR_BLACK,
-        padding = 0,
-    }
-    self[1] = CenterContainer:new{
-        dimen = Geom:new{
-            x = 0,
-            y = 0,
-            w = self.width - 2 * self.padding,
-            h = self.height - 2 * self.padding,
-        },
-        self.text_widget,
-    }
-    self:updateTime()
+    self.width = math.max(probe_size.w, self:getSize().w)
+    self.height = probe_size.h
 end
 
 function ClockWidget:updateTime()
     local text = datetime.secondsToHour(os.time(),
         G_reader_settings:isTrue("twelve_hour_clock"))
     if text == self.text then return false end
-    self.text = text
-    self.text_widget:setText(text)
+    self:setText(text)
     return true
 end
 
 function ClockWidget:paintTo(bb)
     if not G_reader_settings:isTrue("screen_clock") then return end
+    local size = self:getSize()
     local x = Screen:getWidth() - self.width - self.padding
-    local ok, err = pcall(FrameContainer.paintTo, self, bb, x, self.padding)
+        + math.floor((self.width - size.w) / 2)
+    local ok, err = pcall(TextWidget.paintTo, self, bb, x, self.padding)
     if not ok then logger.err("ScreenClock: paint failed:", err) end
 end
 
@@ -103,36 +78,44 @@ function ScreenClock:_tick()
     self:refresh()
 end
 
+function ScreenClock:_ensureWidget()
+    if self.widget then return true end
+    if not self:isEnabled() or not self.host then return false end
+    local ok, widget = pcall(ClockWidget.new, ClockWidget)
+    if not ok then
+        logger.err("ScreenClock: creation failed:", widget)
+        return false
+    end
+    self.widget = widget
+    if self.host.view and self.host.view.view_modules then
+        self.host.view:registerViewModule("screen_clock", self.widget)
+    else
+        self.host.screen_clock_widget = self.widget
+    end
+    return true
+end
+
 function ScreenClock:attach(host)
     self.host = host
-    if not self.widget then
-        local ok, widget = pcall(ClockWidget.new, ClockWidget)
-        if not ok then
-            logger.err("ScreenClock: creation failed:", widget)
-            return
-        end
-        self.widget = widget
+    if self:_ensureWidget() then
+        self.widget:updateTime()
     end
-    if host.view and host.view.view_modules then
-        host.view:registerViewModule("screen_clock", self.widget)
-    else
-        host.screen_clock_widget = self.widget
-    end
-    self.widget:updateTime()
     self:_schedule()
 end
 
 function ScreenClock:refresh(force)
-    if not self.host or not self.widget then return end
-    local region = self:region()
+    if not self.host then return end
     if not self:isEnabled() then
         UIManager:unschedule(self._tick, self)
-        -- Repaint the area so the old clock disappears immediately.
-        UIManager:setDirty(self.host, "ui", region)
+        if self.widget then
+            local region = self:region()
+            if region then UIManager:setDirty(self.host, "ui", region) end
+        end
         return
     end
+    if not self:_ensureWidget() then return end
     if self.widget:updateTime() or force then
-        UIManager:setDirty(self.host, "ui", region)
+        UIManager:setDirty(self.host, "ui", self:region())
     end
     self:_schedule()
 end
