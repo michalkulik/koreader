@@ -644,6 +644,12 @@ function NetworkMgr:isOnline()
         return true
     end
 
+    -- A cached DNS answer can still resolve after the radio was powered down,
+    -- so check the actual Wi-Fi state before claiming we are online.
+    if self:isWifiOn() == false then
+        return false
+    end
+
     return self:canResolveHostnames()
 end
 

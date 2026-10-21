@@ -292,36 +292,35 @@ local function kindleEnableWifi(toggle)
     end
 end
 
--- Check if wifid thinks that the WiFi is enabled
---[[
+-- Check whether the Wi-Fi radio is actually enabled.  Checking only for the
+-- existence of /sys/class/net/wlan0 is wrong: the interface (and even a stale
+-- IP address) can survive after wifid has been told to power the radio down.
+-- That made KOReader believe it was still online after "disable Wi-Fi when
+-- inactive", and requests then failed with ENETUNREACH.
 local function isWifiUp()
     local haslipc, lipc = pcall(require, "liblipclua")
-    local lipc_handle
     if haslipc then
-        lipc_handle = lipc.init("com.github.koreader.networkmgr")
-    end
-    if lipc_handle then
-        local status = lipc_handle:get_int_property("com.lab126.wifid", "enable") or 0
-        lipc_handle:close()
-
-        return status == 1
-    else
-        local std_out = io.popen("lipc-get-prop -i com.lab126.wifid enable", "r")
-        if std_out then
-            local result = std_out:read("*number")
-            std_out:close()
-
-            if not result then
-                return false
+        local lipc_handle = lipc.init("com.github.koreader.networkmgr")
+        if lipc_handle then
+            local status = lipc_handle:get_int_property("com.lab126.wifid", "enable")
+            lipc_handle:close()
+            if status ~= nil then
+                return status == 1
             end
-
-            return result == 1
-        else
-            return false
         end
     end
+
+    local std_out = io.popen("lipc-get-prop -i com.lab126.wifid enable 2>/dev/null", "r")
+    if std_out then
+        local result = std_out:read("*number")
+        std_out:close()
+        if result ~= nil then
+            return result == 1
+        end
+    end
+
+    return nil
 end
---]]
 
 --[[
 Test if a kindle device is flagged as a Special Offers device (i.e., ad supported) (FW >= 5.x)
@@ -522,8 +521,19 @@ function Kindle:initNetworkManager(NetworkMgr)
         return { ssid = nw.essid }
     end
 
-    NetworkMgr.isWifiOn = NetworkMgr.sysfsWifiOn
-    NetworkMgr.isConnected = NetworkMgr.ifHasAnAddress
+    NetworkMgr.isWifiOn = function(self)
+        local wifi_up = isWifiUp()
+        if wifi_up ~= nil then
+            return wifi_up
+        end
+        -- Fallback for very old firmware without a usable wifid property.
+        return self:sysfsWifiOn()
+    end
+    NetworkMgr.isConnected = function(self)
+        -- An IP address or an operational interface is not enough: after
+        -- wifid powered the radio down they may linger for a while.
+        return self:isWifiOn() and self:ifHasAnAddress()
+    end
 end
 
 function Kindle:supportsScreensaver()
