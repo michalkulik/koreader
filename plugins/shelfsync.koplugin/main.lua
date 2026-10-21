@@ -97,6 +97,7 @@ local ShelfSync = WidgetContainer:extend{
     is_doc_only = false,
     auto_upload = true,
     auto_progress = true,
+    progress_pull_pending = false,
     page_counter = 0,
     library = {},
     library_time = 0,
@@ -234,6 +235,17 @@ function ShelfSync:pendingCount()
     return self.queue and self.queue:count() or 0
 end
 
+function ShelfSync:refreshShelfTitle()
+    -- The shelf menu is built before a sync starts.  Update its title in
+    -- place so the "last sync ..." text does not keep showing the old age
+    -- until the shelf is closed and opened again.
+    local menu = self.shelf_menu
+    if not menu or not menu.title_bar then return end
+    local online = NetworkMgr:isOnline()
+    menu.title_bar:setTitle(T(_("Shelf · %1"),
+        online and self:shelfStatusText() or _("offline")))
+end
+
 function ShelfSync:markSyncResult(failed)
     failed = tonumber(failed) or 0
     if failed > 0 then
@@ -245,6 +257,7 @@ function ShelfSync:markSyncResult(failed)
     self.settings:saveSetting("last_sync", self.last_sync)
     self.settings:saveSetting("last_error", self.last_error)
     self.settings:flush()
+    self:refreshShelfTitle()
 end
 
 function ShelfSync:shelfStatusText()
@@ -777,6 +790,9 @@ end
 
 function ShelfSync:pushProgress(interactive)
     if not self:isLoggedIn() then return end
+    -- Never overwrite the server with the first page while a pull is still
+    -- waiting for the user (or for its confirmation dialog) to finish.
+    if self.progress_pull_pending then return end
     local meta = self:currentBook()
     if not meta then return end
     local position, percentage = self:currentPosition()
@@ -809,27 +825,46 @@ function ShelfSync:pushProgress(interactive)
 end
 
 function ShelfSync:pullProgress(interactive)
-    if not self:isLoggedIn() then return nil end
+    if not self:isLoggedIn() then
+        self.progress_pull_pending = false
+        return nil
+    end
     if not NetworkMgr:isOnline() then
+        self.progress_pull_pending = false
         if interactive then
             NetworkMgr:willRerunWhenOnline(function() self:pullProgress(true) end)
         end
         return nil
     end
+
+    self.progress_pull_pending = true
+    local function finish(value)
+        self.progress_pull_pending = false
+        return value
+    end
+
     local meta = self:currentBook()
-    if not meta then return nil end
+    if not meta then return finish(nil) end
 
     local book = self:findBookByMD5(meta.partial_md5)
     if not book then
         self:refreshLibrary()
         book = self:findBookByMD5(meta.partial_md5)
     end
-    if not book or not book.progress or not book.progress.rev or book.progress.rev == 0 then
-        return nil
+    if not book then return finish(nil) end
+
+    -- Do not trust the library cache: another device may have pushed a new
+    -- position after this shelf was refreshed. Fetch the current revision.
+    local fetched = self.client:get_progress(book.id)
+    if fetched and fetched.rev and fetched.rev > 0 then
+        book.progress = fetched
+    end
+    if not book.progress or not book.progress.rev or book.progress.rev == 0 then
+        return finish(nil)
     end
     local entry = self.index:get(meta.file) or {}
     if (entry.last_rev or 0) >= book.progress.rev then
-        return nil
+        return finish(nil)
     end
 
     local current_position, current_percentage = self:currentPosition()
@@ -843,36 +878,47 @@ function ShelfSync:pullProgress(interactive)
             last_rev = book.progress.rev,
         })
         if interactive then self:showInfo(_("Progress is already up to date.")) end
-        return "same"
+        return finish("same")
     end
 
-    local function apply()
-        self:gotoPosition(book.progress.position)
+    local function remember()
         self.index:update(meta.file, {
             book_id = book.id,
             partial_md5 = meta.partial_md5,
             uploaded = book.upload_required == false,
             last_rev = book.progress.rev,
         })
+    end
+    local function apply()
+        self:gotoPosition(book.progress.position)
+        remember()
         self:showInfo(T(_("Moved to %1% from another device."),
             math.floor((book.progress.percentage or 0) * 100)))
     end
 
-    if interactive then
+    -- A book just downloaded from the shelf has no local reading state.  In
+    -- that case jumping straight to the server position is expected and does
+    -- not need another confirmation prompt.
+    local fresh_download = entry.downloaded and not entry.last_rev
+    if interactive or fresh_download then
         apply()
-        return true
-    else
-        UIManager:show(ConfirmBox:new{
-            text = T(_("Sync to position %1% from another device?"),
-                math.floor((book.progress.percentage or 0) * 100)),
-            ok_text = _("Go"),
-            ok_callback = apply,
-            cancel_callback = function()
-                self.index:update(meta.file, { last_rev = book.progress.rev })
-            end,
-        })
-        return "asked"
+        return finish(true)
     end
+
+    UIManager:show(ConfirmBox:new{
+        text = T(_("Sync to position %1% from another device?"),
+            math.floor((book.progress.percentage or 0) * 100)),
+        ok_text = _("Go"),
+        ok_callback = function()
+            apply()
+            finish("applied")
+        end,
+        cancel_callback = function()
+            remember()
+            finish("cancelled")
+        end,
+    })
+    return "asked"
 end
 
 -- -------------------------------------------------------------------- queue
@@ -1843,6 +1889,7 @@ end
 
 function ShelfSync:scheduleProgressPush(delay)
     if not self:isLoggedIn() or not self.auto_progress then return end
+    if self.progress_pull_pending then return end
     self:cancelProgressPush()
     self.progress_push_timer = function()
         self.progress_push_timer = nil
@@ -1862,6 +1909,7 @@ function ShelfSync:onReaderReady()
     end
     if not self:isLoggedIn() then return end
     self.page_counter = 0
+    self.progress_pull_pending = self.auto_progress and true or false
     self:cancelProgressPush()
     -- Run upload first, then pull. This matters for books opened from an
     -- Android file manager: a brand-new book has no server entry yet, so
