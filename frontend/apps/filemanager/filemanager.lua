@@ -30,6 +30,7 @@ local ReaderDeviceStatus = require("apps/reader/modules/readerdevicestatus")
 local ReaderDictionary = require("apps/reader/modules/readerdictionary")
 local ReaderWikipedia = require("apps/reader/modules/readerwikipedia")
 local ReadHistory = require("readhistory")
+local ScreenClock = require("ui/widget/screenclock")
 local ScreenClockListener = require("ui/screenclock_listener")
 local Screenshoter = require("ui/widget/screenshoter")
 local TitleBar = require("ui/widget/titlebar")
@@ -358,6 +359,12 @@ function FileManager:setupLayout()
     self:registerKeyEvents()
 end
 
+function FileManager:paintTo(bb, x, y)
+    InputContainer.paintTo(self, bb, x, y)
+    local clock = self.screen_clock_widget
+    if clock then clock:paintTo(bb) end
+end
+
 function FileManager:registerKeyEvents()
     -- NOTE: We need to be surgical here, because this is called through reinit at runtime.
     if Device:hasKeys() then
@@ -430,6 +437,7 @@ function FileManager:init()
     end
 
     self:setupLayout()
+    ScreenClock:attach(self)
     self:initGesListener()
     self:handleEvent(Event:new("SetDimensions", self.dimen))
     self:handleEvent(Event:new("PathChanged", self.file_chooser.path))
@@ -1328,7 +1336,6 @@ function FileManager:showFiles(path, focused_file, selected_files)
         selected_files = selected_files,
     }
     UIManager:show(file_manager)
-    require("ui/widget/screenclock"):show(file_manager, true)
 end
 
 --- A shortcut to execute mv.

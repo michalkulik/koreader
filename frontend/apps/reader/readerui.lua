@@ -58,6 +58,7 @@ local ReaderTypeset = require("apps/reader/modules/readertypeset")
 local ReaderTypography = require("apps/reader/modules/readertypography")
 local ReaderUserHyph = require("apps/reader/modules/readeruserhyph")
 local ReaderView = require("apps/reader/modules/readerview")
+local ScreenClock = require("ui/widget/screenclock")
 local ScreenClockListener = require("ui/screenclock_listener")
 local ReaderWikipedia = require("apps/reader/modules/readerwikipedia")
 local ReaderZooming = require("apps/reader/modules/readerzooming")
@@ -161,6 +162,7 @@ function ReaderUI:init()
         ui = self,
         document = self.document,
     })
+    ScreenClock:attach(self)
     -- goto link controller
     self:registerModule("link", ReaderLink:new{
         dialog = self.dialog,
@@ -800,7 +802,6 @@ function ReaderUI:doShowReader(file, provider, seamless)
     end
 
     UIManager:show(reader, seamless and "ui" or "full")
-    require("ui/widget/screenclock"):show(reader, true)
 end
 
 function ReaderUI:unlockDocumentWithPassword(document, try_again)
