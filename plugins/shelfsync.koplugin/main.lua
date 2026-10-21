@@ -616,12 +616,18 @@ function ShelfSync:currentPosition()
     end
 end
 
-function ShelfSync:gotoPosition(position)
-    if not position or position == "" then return end
+function ShelfSync:gotoPosition(position, percentage)
     if self.ui.document.info.has_pages then
-        self.ui:handleEvent(Event:new("GotoPage", tonumber(position)))
-    else
+        local page = tonumber(position)
+        if page then
+            self.ui:handleEvent(Event:new("GotoPage", page))
+        elseif percentage then
+            self.ui:handleEvent(Event:new("GotoPercent", math.floor(percentage * 100)))
+        end
+    elseif position and position ~= "" then
         self.ui:handleEvent(Event:new("GotoXPointer", position))
+    elseif percentage then
+        self.ui:handleEvent(Event:new("GotoPercent", math.floor(percentage * 100)))
     end
 end
 
@@ -930,9 +936,6 @@ function ShelfSync:pullProgress(interactive)
         return finish(nil)
     end
     local entry = self.index:get(meta.file) or {}
-    if (entry.last_rev or 0) >= book.progress.rev then
-        return finish(nil)
-    end
 
     local current_position, current_percentage = self:currentPosition()
     if tostring(book.progress.position) == tostring(current_position)
@@ -943,6 +946,8 @@ function ShelfSync:pullProgress(interactive)
             partial_md5 = meta.partial_md5,
             uploaded = book.upload_required == false,
             last_rev = book.progress.rev,
+            last_position = book.progress.position,
+            last_percentage = book.progress.percentage,
         })
         if interactive then self:showInfo(_("Progress is already up to date.")) end
         return finish("same")
@@ -954,6 +959,8 @@ function ShelfSync:pullProgress(interactive)
             partial_md5 = meta.partial_md5,
             uploaded = book.upload_required == false,
             last_rev = book.progress.rev,
+            last_position = book.progress.position,
+            last_percentage = book.progress.percentage,
         })
     end
 
@@ -970,21 +977,22 @@ function ShelfSync:pullProgress(interactive)
         return finish("local-ahead")
     end
     local function apply()
-        self:gotoPosition(book.progress.position)
+        logger.info("ShelfSync: applying server progress", book.progress.rev,
+            book.progress.position, book.progress.percentage, "local:", current_position, current_percentage)
+        self:gotoPosition(book.progress.position, book.progress.percentage)
         remember()
         self:showInfo(T(_("Moved to %1% from another device."),
             math.floor((book.progress.percentage or 0) * 100)))
     end
 
-    -- A book managed by the shelf should follow the server position: a fresh
-    -- download has no local reading state, and for an existing download the
-    -- server may have a newer position from another device.  (The local-ahead
-    -- branch above already covers the opposite direction.)
-    local fresh_download = entry.downloaded and not entry.last_rev
-    local server_ahead = entry.downloaded and book.progress.percentage
-        and current_percentage
+    -- Follow the server whenever it is ahead, not only for books downloaded
+    -- through the shelf.  A side-loaded copy can still be the same book, and
+    -- users expect the second device to jump to the position they just read
+    -- on the first one.  The local-ahead branch above covers the opposite
+    -- direction, so this never moves the reader backwards.
+    local server_ahead = book.progress.percentage and current_percentage
         and book.progress.percentage > current_percentage + 0.005
-    if interactive or fresh_download or server_ahead then
+    if interactive or server_ahead then
         apply()
         return finish(true)
     end
