@@ -2107,7 +2107,7 @@ end
 
 function ShelfSync:scheduleProgressPush(delay)
     if not self:isLoggedIn() or not self.auto_progress then return end
-    if self.progress_pull_pending then return end
+    if self.progress_pull_pending or self.resume_sync_scheduled then return end
     self:cancelProgressPush()
     self.progress_push_timer = function()
         self.progress_push_timer = nil
