@@ -186,6 +186,11 @@ local function add_title_tap(menu)
     }
 end
 
+local function is_title_tap(menu, pos)
+    return menu.title_bar and menu.title_bar.dimen
+        and pos and menu.title_bar.dimen:contains(pos)
+end
+
 function CoverMenu:init()
     Menu.init(self)
     -- A fallback for taps that arrive on the menu itself instead of a tile.
@@ -206,6 +211,12 @@ function CoverMenu:init()
 end
 
 function CoverMenu:onCoverTileTapFallback(arg, ges)
+    -- The full-screen fallback also covers the title bar.  On some e-ink
+    -- devices the separate TitleTap gesture is not delivered reliably, so
+    -- recognise a title-bar tap here as well.
+    if is_title_tap(self, ges and ges.pos) then
+        return self:onTitleTap()
+    end
     local tile = find_cover_tile(self.item_group, ges.pos)
     if tile and tile.onTapSelect then
         return tile:onTapSelect()
@@ -397,7 +408,23 @@ local ShelfListMenu = Menu:extend{
 
 function ShelfListMenu:init()
     Menu.init(self)
+    self.ges_events.TitleTapFallback = {
+        GestureRange:new{
+            ges = "tap",
+            range = Geom:new{
+                x = 0, y = 0,
+                w = Screen:getWidth(),
+                h = Screen:getHeight(),
+            },
+        },
+    }
     add_title_tap(self)
+end
+
+function ShelfListMenu:onTitleTapFallback(arg, ges)
+    if is_title_tap(self, ges and ges.pos) then
+        return self:onTitleTap()
+    end
 end
 
 function ShelfListMenu:onTitleTap()

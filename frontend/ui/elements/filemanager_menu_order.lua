@@ -2,12 +2,12 @@ local Device = require("device")
 
 local order = {
     ["KOMenu:menu_buttons"] = {
-        "shelf_button",
         "filemanager_settings",
         "setting",
         "tools",
         "search",
         "plus_menu",
+        "shelf_button",
         "main",
     },
     -- Top-menu action button, kept by MenuSorter like a normal tab.

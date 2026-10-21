@@ -14,6 +14,12 @@
 # The manifest and latest.json must live in the *latest* release. GitHub's
 # /releases/latest/download/ URL then resolves the manifest, and the manifest
 # resolves the APK from the same release.
+#
+# IMPORTANT: `kodev release android-arm64` produces a debug-signed APK.  It
+# MUST be re-signed with the fork's release key before this script runs:
+#   tools/sign-android-release.sh --apk koreader-android-arm64-vYYYY.MM.apk
+# Otherwise Android rejects the update with a signature mismatch.  This script
+# verifies the signer certificate and aborts on a debug-signed APK.
 
 set -euo pipefail
 
@@ -47,6 +53,33 @@ apk="$(realpath "${apk}")"
     echo "version must look like vYYYY.MM (got: ${version})" >&2
     exit 1
 }
+
+# Refuse to publish an APK signed with Android's throw-away debug key.  An
+# update installed over an older KOReader build requires the same certificate
+# as that older build.
+expected_sha="${KOREADER_EXPECTED_SIGNER_SHA256:-78483177925e3d355d2aad8f348ec7bff4efd5261db8056bf8c0c920842cd4f6}"
+sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.local/share/tools/android-sdk}}"
+apksigner=""
+if [[ -d "${sdk}/build-tools" ]]; then
+    apksigner="$(find "${sdk}/build-tools" -mindepth 2 -maxdepth 2 -type f -name apksigner \
+        | sort -V | tail -1)"
+fi
+[[ -n "${apksigner}" ]] || apksigner="$(command -v apksigner || true)"
+[[ -n "${apksigner}" ]] || {
+    echo "apksigner not found; cannot verify APK signing key." >&2
+    exit 1
+}
+apk_sha="$("${apksigner}" verify --print-certs "${apk}" \
+    | sed -n 's/^.*certificate SHA-256 digest: //p' | head -1)"
+apk_sha="${apk_sha//:/}"
+apk_sha="$(printf '%s' "${apk_sha}" | tr '[:upper:]' '[:lower:]')"
+if [[ "${apk_sha}" != "${expected_sha}" ]]; then
+    echo "ERROR: APK is not signed with the KOReader release key." >&2
+    echo "  expected: ${expected_sha}" >&2
+    echo "  actual:   ${apk_sha:-<none>}" >&2
+    echo "Run: tools/sign-android-release.sh --apk $(basename "${apk}")" >&2
+    exit 1
+fi
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 out_dir="${TMPDIR:-/tmp}/opencode/ota-assets-${version}"

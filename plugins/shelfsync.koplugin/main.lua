@@ -397,8 +397,23 @@ function ShelfSync:showHostMenu()
     -- full-screen shelf first.  The shelf stays behind the menu and is still
     -- there when the top menu is closed.
     local ui = self.ui
-    if ui and ui.menu and ui.menu.onShowMenu then
-        ui.menu:onShowMenu()
+    local menu = ui and ui.menu
+    if not (menu and menu.onShowMenu) then
+        -- The shelf can outlive the UI that created it (for example when it
+        -- was opened from the reader and the reader instance was replaced).
+        -- Fall back to whichever main UI is currently alive.
+        local FileManager = require("apps/filemanager/filemanager")
+        local ReaderUI = require("apps/reader/readerui")
+        for _, candidate in ipairs({ FileManager.instance, ReaderUI.instance }) do
+            if candidate and candidate.menu and candidate.menu.onShowMenu then
+                menu = candidate.menu
+                break
+            end
+        end
+    end
+    if menu and menu.onShowMenu then
+        menu:onShowMenu()
+        return true
     end
 end
 

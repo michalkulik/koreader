@@ -552,6 +552,12 @@ a `menu_items.shelfsync` istnieje w menedżerze plików.
 - manifest może zawierać nazwę pliku albo pełny URL,
 - `tools/make-ota-assets.py` generuje manifest i `latest.json`,
 - `tools/release-android.sh` publikuje APK + oba pliki OTA w wydaniu GitHub,
+- **każdy APK trzeba przed publikacją podpisać kluczem wydania**:
+  `tools/sign-android-release.sh --apk koreader-android-arm64-vYYYY.MM.apk`.
+  `kodev release android-arm64` tworzy APK podpisany tymczasowym kluczem debug;
+  Android odrzuci taką aktualizację jako niezgodność podpisu. `release-android.sh`
+  sprawdza certyfikat (SHA-256 `78483177…4f6`) i przerywa publikację, jeśli APK
+  nie jest podpisany kluczem forka.
 - menu: **Update → Settings → Source: github.com/michalkulik/koreader**.
 
 **Testy:** wtyczka ładowana na KOReader Linux w trybie headless; `showShelf`,
