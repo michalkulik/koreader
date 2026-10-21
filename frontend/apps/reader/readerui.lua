@@ -58,6 +58,7 @@ local ReaderTypeset = require("apps/reader/modules/readertypeset")
 local ReaderTypography = require("apps/reader/modules/readertypography")
 local ReaderUserHyph = require("apps/reader/modules/readeruserhyph")
 local ReaderView = require("apps/reader/modules/readerview")
+local ScreenClockListener = require("ui/screenclock_listener")
 local ReaderWikipedia = require("apps/reader/modules/readerwikipedia")
 local ReaderZooming = require("apps/reader/modules/readerzooming")
 local Screenshoter = require("ui/widget/screenshoter")
@@ -147,6 +148,10 @@ function ReaderUI:init()
     SettingsMigration:migrateSettings(self.doc_settings)
 
     self:registerKeyEvents()
+
+    -- Clock overlay must see rotation events before ReaderView consumes them;
+    -- it returns false so the normal rotation handling still runs.
+    self:registerModule("screenclock", ScreenClockListener:new{})
 
     -- a view container (so it must be child #1!)
     -- all paintable widgets need to be a child of reader view
@@ -795,6 +800,7 @@ function ReaderUI:doShowReader(file, provider, seamless)
     end
 
     UIManager:show(reader, seamless and "ui" or "full")
+    require("ui/widget/screenclock"):show(true)
 end
 
 function ReaderUI:unlockDocumentWithPassword(document, try_again)

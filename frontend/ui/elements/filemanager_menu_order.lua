@@ -105,6 +105,7 @@ local order = {
         "----------------------------",
         "screen_dpi",
         "screen_eink_opt",
+        "screen_clock",
         "autowarmth",
         "color_rendering",
         "android_system_brightness",

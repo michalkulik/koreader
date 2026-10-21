@@ -30,6 +30,7 @@ local ReaderDeviceStatus = require("apps/reader/modules/readerdevicestatus")
 local ReaderDictionary = require("apps/reader/modules/readerdictionary")
 local ReaderWikipedia = require("apps/reader/modules/readerwikipedia")
 local ReadHistory = require("readhistory")
+local ScreenClockListener = require("ui/screenclock_listener")
 local Screenshoter = require("ui/widget/screenshoter")
 local TitleBar = require("ui/widget/titlebar")
 local UIManager = require("ui/uimanager")
@@ -396,6 +397,7 @@ function FileManager:init()
     self.active_widgets = {}
     self.postInitCallback = {}
 
+    self:registerModule("screenclock", ScreenClockListener:new{})
     self:registerModule("screenshot", Screenshoter:new{
         prefix = "FileManager",
         ui = self,
@@ -1326,6 +1328,7 @@ function FileManager:showFiles(path, focused_file, selected_files)
         selected_files = selected_files,
     }
     UIManager:show(file_manager)
+    require("ui/widget/screenclock"):show(true)
 end
 
 --- A shortcut to execute mv.
