@@ -78,24 +78,38 @@ function ScreenClock:_tick()
     self:refresh()
 end
 
-function ScreenClock:_ensureWidget()
-    if self.widget then return true end
-    if not self:isEnabled() or not self.host then return false end
-    local ok, widget = pcall(ClockWidget.new, ClockWidget)
-    if not ok then
-        logger.err("ScreenClock: creation failed:", widget)
-        return false
-    end
-    self.widget = widget
-    if self.host.view and self.host.view.view_modules then
-        self.host.view:registerViewModule("screen_clock", self.widget)
+-- Register the widget with the host that is currently on screen. The clock is
+-- a singleton shared by the file manager and every ReaderUI instance, so this
+-- has to run on every attach, not only when the widget is first created.
+function ScreenClock:_register()
+    local host = self.host
+    if not host or not self.widget then return end
+    if host.view and host.view.view_modules then
+        host.view:registerViewModule("screen_clock", self.widget)
     else
-        self.host.screen_clock_widget = self.widget
+        host.screen_clock_widget = self.widget
     end
+end
+
+function ScreenClock:_ensureWidget()
+    if not self:isEnabled() or not self.host then return false end
+    if not self.widget then
+        local ok, widget = pcall(function() return ClockWidget:new() end)
+        if not ok then
+            logger.err("ScreenClock: creation failed:", widget)
+            return false
+        end
+        self.widget = widget
+    end
+    self:_register()
     return true
 end
 
 function ScreenClock:attach(host)
+    if self.host and self.host ~= host and self.host.screen_clock_widget == self.widget then
+        -- Do not let a closed file manager keep painting our widget.
+        self.host.screen_clock_widget = nil
+    end
     self.host = host
     if self:_ensureWidget() then
         self.widget:updateTime()
@@ -127,6 +141,7 @@ end
 
 function ScreenClock:hide()
     UIManager:unschedule(self._tick, self)
+    self.host = nil
 end
 
 return ScreenClock

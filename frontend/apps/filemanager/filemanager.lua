@@ -845,6 +845,7 @@ function FileManager:onCloseWidget()
         logger.warn("FileManager instance mismatch! Closed", tostring(self), "while the active one is supposed to be", tostring(FileManager.instance))
     end
     FileManager.instance = nil
+    ScreenClock:hide()
 end
 
 function FileManager:onShowingReader()

@@ -909,6 +909,7 @@ function ReaderUI:onCloseWidget()
     end
     ReaderUI.instance = nil
     self._coroutine = nil
+    ScreenClock:hide()
 end
 
 function ReaderUI:dealWithLoadDocumentFailure()
