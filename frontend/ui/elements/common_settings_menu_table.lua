@@ -282,6 +282,7 @@ common_settings.screen_rotation = dofile("frontend/ui/elements/screen_rotation_m
 common_settings.screen_dpi = dofile("frontend/ui/elements/screen_dpi_menu_table.lua")
 common_settings.screen_eink_opt = dofile("frontend/ui/elements/screen_eink_opt_menu_table.lua")
 common_settings.screen_clock = dofile("frontend/ui/elements/screen_clock_menu_table.lua")
+common_settings.screen_clock_battery = dofile("frontend/ui/elements/screen_clock_battery_menu_table.lua")
 common_settings.screen_notification = dofile("frontend/ui/elements/screen_notification_menu_table.lua")
 
 if Device:isTouchDevice() then

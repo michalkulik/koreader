@@ -6,24 +6,66 @@ file manager paints it after its normal content. This keeps input, menus and
 the screensaver completely untouched.
 ]]
 
+local Device = require("device")
 local Font = require("ui/font")
 local Geom = require("ui/geometry")
-local Screen = require("device").screen
+local Screen = Device.screen
 local TextWidget = require("ui/widget/textwidget")
 local UIManager = require("ui/uimanager")
 local datetime = require("datetime")
 local logger = require("logger")
 
+-- Android screens are much denser than e-ink ones, so the same scaled font
+-- size ends up far too large there and overlaps the first line of the book.
+local IS_ANDROID = Device:isAndroid()
+
+local function fontSize()
+    return Screen:scaleBySize(IS_ANDROID and 10 or 14)
+end
+
+local function verticalPadding()
+    return Screen:scaleBySize(IS_ANDROID and 2 or 3)
+end
+
+local function getBatteryText()
+    if not Device:hasBattery() then return nil end
+    local powerd = Device:getPowerDevice()
+    if not powerd then return nil end
+    local ok, capacity = pcall(powerd.getCapacity, powerd)
+    if not ok or type(capacity) ~= "number" then return nil end
+    local charging = false
+    local ok_charging, is_charging = pcall(powerd.isCharging, powerd)
+    if ok_charging then charging = is_charging end
+    return string.format("%s%d%%", charging and "+" or "", math.floor(capacity))
+end
+
 local ClockWidget = TextWidget:extend{
     padding = 3,
 }
 
-function ClockWidget:init()
-    self.padding = Screen:scaleBySize(3)
-    self.face = Font:getFace("cfont", Screen:scaleBySize(14))
-    self.text = datetime.secondsToHour(os.time(),
+function ClockWidget:getDisplayText()
+    local text = datetime.secondsToHour(os.time(),
         G_reader_settings:isTrue("twelve_hour_clock"))
-    local probe = TextWidget:new{ text = "88:88 WWW", face = self.face, padding = 0 }
+    if G_reader_settings:isTrue("screen_clock_battery") then
+        local battery = getBatteryText()
+        if battery then
+            text = text .. "  " .. battery
+        end
+    end
+    return text
+end
+
+function ClockWidget:init()
+    self.padding = verticalPadding()
+    self.face = Font:getFace("cfont", fontSize())
+    self.text = self:getDisplayText()
+    -- Reserve room for the widest possible content so the position stays
+    -- stable when the time or the battery percentage changes.
+    local probe = TextWidget:new{
+        text = "88:88 WWW +100%",
+        face = self.face,
+        padding = 0,
+    }
     local probe_size = probe:getSize()
     probe:free()
     self.width = math.max(probe_size.w, self:getSize().w)
@@ -31,8 +73,7 @@ function ClockWidget:init()
 end
 
 function ClockWidget:updateTime()
-    local text = datetime.secondsToHour(os.time(),
-        G_reader_settings:isTrue("twelve_hour_clock"))
+    local text = self:getDisplayText()
     if text == self.text then return false end
     self:setText(text)
     return true
