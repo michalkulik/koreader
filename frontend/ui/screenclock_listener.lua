@@ -24,4 +24,14 @@ function ScreenClockListener:onToggleNightMode()
     ScreenClock:refresh(true)
 end
 
+-- The Wi-Fi label is part of the clock text, so repaint as soon as the
+-- connection state changes (and not only on the next minute tick).
+function ScreenClockListener:onNetworkConnecting()
+    ScreenClock:refresh(true)
+end
+
+ScreenClockListener.onNetworkConnected = ScreenClockListener.onNetworkConnecting
+ScreenClockListener.onNetworkDisconnecting = ScreenClockListener.onNetworkConnecting
+ScreenClockListener.onNetworkDisconnected = ScreenClockListener.onNetworkConnecting
+
 return ScreenClockListener

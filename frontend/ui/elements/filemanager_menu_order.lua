@@ -107,6 +107,7 @@ local order = {
         "screen_eink_opt",
         "screen_clock",
         "screen_clock_battery",
+        "screen_clock_wifi",
         "autowarmth",
         "color_rendering",
         "android_system_brightness",

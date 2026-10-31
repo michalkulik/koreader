@@ -14,6 +14,7 @@ local TextWidget = require("ui/widget/textwidget")
 local UIManager = require("ui/uimanager")
 local datetime = require("datetime")
 local logger = require("logger")
+local _ = require("gettext")
 
 -- Android screens are much denser than e-ink ones, so the same scaled font
 -- size ends up far too large there and overlaps the first line of the book.
@@ -39,6 +40,22 @@ local function getBatteryText()
     return string.format("%s%d%%", charging and "+" or "", math.floor(capacity))
 end
 
+local function getWifiText()
+    if not Device:hasWifiToggle() then return nil end
+    local ok, NetworkMgr = pcall(require, "ui/network/manager")
+    if not ok or not NetworkMgr then return nil end
+    local ok_on, wifi_on = pcall(NetworkMgr.isWifiOn, NetworkMgr)
+    if not ok_on then return nil end
+    if not wifi_on then
+        return _("Wi-Fi off")
+    end
+    local ok_conn, connected = pcall(NetworkMgr.isConnected, NetworkMgr)
+    if ok_conn and connected then
+        return _("Wi-Fi")
+    end
+    return _("Wi-Fi ...")
+end
+
 local ClockWidget = TextWidget:extend{
     padding = 3,
 }
@@ -52,6 +69,12 @@ function ClockWidget:getDisplayText()
             text = text .. "  " .. battery
         end
     end
+    if G_reader_settings:isTrue("screen_clock_wifi") then
+        local wifi = getWifiText()
+        if wifi then
+            text = text .. "  " .. wifi
+        end
+    end
     return text
 end
 
@@ -62,7 +85,7 @@ function ClockWidget:init()
     -- Reserve room for the widest possible content so the position stays
     -- stable when the time or the battery percentage changes.
     local probe = TextWidget:new{
-        text = "88:88 WWW +100%",
+        text = "88:88 WWW +100% Wi-Fi off",
         face = self.face,
         padding = 0,
     }
@@ -82,8 +105,10 @@ end
 function ClockWidget:paintTo(bb)
     if not G_reader_settings:isTrue("screen_clock") then return end
     local size = self:getSize()
-    local x = Screen:getWidth() - self.width - self.padding
-        + math.floor((self.width - size.w) / 2)
+    -- Right-align the current text so the right edge stays put as the battery
+    -- percentage or Wi-Fi label changes width. self.width is the widest
+    -- possible content and only matters for the dirty region.
+    local x = Screen:getWidth() - size.w - self.padding
     local ok, err = pcall(TextWidget.paintTo, self, bb, x, self.padding)
     if not ok then logger.err("ScreenClock: paint failed:", err) end
 end
