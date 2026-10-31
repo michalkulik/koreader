@@ -195,6 +195,37 @@ end
 function NetworkMgr:getNetworkInterfaceName() end
 -- Current signal quality as a 0-100 percentage, when the platform can report it.
 function NetworkMgr:getWifiSignalQuality() return nil end
+
+-- Icon name that reflects both the radio state and, when available, the
+-- current signal strength. Shared by the menu footer and the on-screen clock.
+function NetworkMgr:getWifiIconName()
+    if not Device:hasWifiToggle() then
+        return nil
+    end
+    if self:isWifiOn() == false then
+        return "wifi.off"
+    end
+    if self:isConnected() == false then
+        return "wifi.open.0"
+    end
+    local quality = self:getWifiSignalQuality()
+    if not quality then
+        return "wifi"
+    end
+    local level
+    if quality > 80 then
+        level = 100
+    elseif quality > 55 then
+        level = 75
+    elseif quality > 30 then
+        level = 50
+    elseif quality > 5 then
+        level = 25
+    else
+        level = 0
+    end
+    return "wifi.open." .. level
+end
 function NetworkMgr:getConfiguredNetworks() end -- From the *backend*, e.g., wpa_cli list_networks (as opposed to `getAllSavedNetworks`)
 function NetworkMgr:getNetworkList() end
 function NetworkMgr:getCurrentNetwork() end

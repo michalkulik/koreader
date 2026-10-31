@@ -10,11 +10,11 @@ local Device = require("device")
 local Font = require("ui/font")
 local Geom = require("ui/geometry")
 local Screen = Device.screen
+local IconWidget = require("ui/widget/iconwidget")
 local TextWidget = require("ui/widget/textwidget")
 local UIManager = require("ui/uimanager")
 local datetime = require("datetime")
 local logger = require("logger")
-local _ = require("gettext")
 
 -- Android screens are much denser than e-ink ones, so the same scaled font
 -- size ends up far too large there and overlaps the first line of the book.
@@ -40,22 +40,6 @@ local function getBatteryText()
     return string.format("%s%d%%", charging and "+" or "", math.floor(capacity))
 end
 
-local function getWifiText()
-    if not Device:hasWifiToggle() then return nil end
-    local ok, NetworkMgr = pcall(require, "ui/network/manager")
-    if not ok or not NetworkMgr then return nil end
-    local ok_on, wifi_on = pcall(NetworkMgr.isWifiOn, NetworkMgr)
-    if not ok_on then return nil end
-    if not wifi_on then
-        return _("Wi-Fi off")
-    end
-    local ok_conn, connected = pcall(NetworkMgr.isConnected, NetworkMgr)
-    if ok_conn and connected then
-        return _("Wi-Fi")
-    end
-    return _("Wi-Fi ...")
-end
-
 local ClockWidget = TextWidget:extend{
     padding = 3,
 }
@@ -69,23 +53,47 @@ function ClockWidget:getDisplayText()
             text = text .. "  " .. battery
         end
     end
-    if G_reader_settings:isTrue("screen_clock_wifi") then
-        local wifi = getWifiText()
-        if wifi then
-            text = text .. "  " .. wifi
-        end
-    end
     return text
+end
+
+-- Use the exact same Wi-Fi icon as the one shown in the menu footer (Kindle)
+-- and in the network menu (Android): wifi.off when the radio is off, the
+-- signal-strength icon when it is connected, and wifi.open.0 otherwise.
+function ClockWidget:getWifiIconName()
+    if not G_reader_settings:isTrue("screen_clock_wifi") then return nil end
+    if not Device:hasWifiToggle() then return nil end
+    local ok, NetworkMgr = pcall(require, "ui/network/manager")
+    if not ok or not NetworkMgr then return nil end
+    local ok_name, name = pcall(NetworkMgr.getWifiIconName, NetworkMgr)
+    if not ok_name then return nil end
+    return name
+end
+
+function ClockWidget:_updateWifiIcon()
+    local name = self:getWifiIconName()
+    if name == self.wifi_icon_name then return false end
+    self.wifi_icon_name = name
+    if name and not self.wifi_icons[name] then
+        self.wifi_icons[name] = IconWidget:new{
+            icon = name,
+            width = self.wifi_icon_size,
+            height = self.wifi_icon_size,
+        }
+    end
+    return true
 end
 
 function ClockWidget:init()
     self.padding = verticalPadding()
     self.face = Font:getFace("cfont", fontSize())
+    self.wifi_icon_size = fontSize()
+    self.wifi_icon_gap = Screen:scaleBySize(3)
+    self.wifi_icons = {}
     self.text = self:getDisplayText()
-    -- Reserve room for the widest possible content so the position stays
-    -- stable when the time or the battery percentage changes.
+    -- Reserve room for the widest possible text so the size of the dirty
+    -- region stays correct when the time or the battery level changes.
     local probe = TextWidget:new{
-        text = "88:88 WWW +100% Wi-Fi off",
+        text = "88:88 WWW +100%",
         face = self.face,
         padding = 0,
     }
@@ -93,22 +101,37 @@ function ClockWidget:init()
     probe:free()
     self.width = math.max(probe_size.w, self:getSize().w)
     self.height = probe_size.h
+    self:_updateWifiIcon()
 end
 
 function ClockWidget:updateTime()
+    local changed = false
     local text = self:getDisplayText()
-    if text == self.text then return false end
-    self:setText(text)
-    return true
+    if text ~= self.text then
+        self:setText(text)
+        changed = true
+    end
+    if self:_updateWifiIcon() then
+        changed = true
+    end
+    return changed
 end
 
 function ClockWidget:paintTo(bb)
     if not G_reader_settings:isTrue("screen_clock") then return end
     local size = self:getSize()
-    -- Right-align the current text so the right edge stays put as the battery
-    -- percentage or Wi-Fi label changes width. self.width is the widest
-    -- possible content and only matters for the dirty region.
+    -- Right-align the text so its right edge stays put as the battery
+    -- percentage changes width. The Wi-Fi icon sits to the left of it.
     local x = Screen:getWidth() - size.w - self.padding
+    local icon = self.wifi_icon_name and self.wifi_icons[self.wifi_icon_name]
+    if icon then
+        local text_height = size.h - 2 * self.padding
+        local icon_y = self.padding + math.max(0,
+            math.floor((text_height - self.wifi_icon_size) / 2))
+        local icon_x = x - self.wifi_icon_gap - self.wifi_icon_size
+        local ok_icon, err_icon = pcall(icon.paintTo, icon, bb, icon_x, icon_y)
+        if not ok_icon then logger.err("ScreenClock: icon paint failed:", err_icon) end
+    end
     local ok, err = pcall(TextWidget.paintTo, self, bb, x, self.padding)
     if not ok then logger.err("ScreenClock: paint failed:", err) end
 end
@@ -125,11 +148,15 @@ end
 function ScreenClock:region()
     local w = self.widget
     if not w then return nil end
+    -- Always reserve the icon's area, even when no icon is currently shown,
+    -- so turning the Wi-Fi icon off erases the old one as well.
+    local icon_w = w.wifi_icon_size and (w.wifi_icon_size + w.wifi_icon_gap) or 0
+    local total_w = w.width + icon_w
     return Geom:new{
-        x = Screen:getWidth() - w.width - w.padding,
+        x = Screen:getWidth() - total_w - w.padding,
         y = w.padding,
-        w = w.width,
-        h = w.height,
+        w = total_w,
+        h = math.max(w.height, w.wifi_icon_size or 0),
     }
 end
 

@@ -45,23 +45,7 @@ local DGENERIC_ICON_SIZE = G_defaults:readSetting("DGENERIC_ICON_SIZE")
 local function getWifiIconName()
     if not Device:isKindle() then return nil end
     local NetworkMgr = require("ui/network/manager")
-    if NetworkMgr:isWifiOn() == false then
-        return "wifi.off"
-    end
-    local quality = NetworkMgr:getWifiSignalQuality() or 0
-    local level
-    if quality > 80 then
-        level = 100
-    elseif quality > 55 then
-        level = 75
-    elseif quality > 30 then
-        level = 50
-    elseif quality > 5 then
-        level = 25
-    else
-        level = 0
-    end
-    return "wifi.open." .. level
+    return NetworkMgr:getWifiIconName()
 end
 
 --[[
