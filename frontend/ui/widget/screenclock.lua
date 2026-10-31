@@ -125,9 +125,10 @@ function ClockWidget:paintTo(bb)
     local x = Screen:getWidth() - size.w - self.padding
     local icon = self.wifi_icon_name and self.wifi_icons[self.wifi_icon_name]
     if icon then
-        local text_height = size.h - 2 * self.padding
-        local icon_y = self.padding + math.max(0,
-            math.floor((text_height - self.wifi_icon_size) / 2))
+        -- The Wi-Fi glyph's optical center sits a bit higher than the clock
+        -- digits, so nudge it down to line up with the text baseline.
+        local nudge = Screen:scaleBySize(2)
+        local icon_y = math.floor((size.h - self.wifi_icon_size) / 2) + nudge
         local icon_x = x - self.wifi_icon_gap - self.wifi_icon_size
         local ok_icon, err_icon = pcall(icon.paintTo, icon, bb, icon_x, icon_y)
         if not ok_icon then logger.err("ScreenClock: icon paint failed:", err_icon) end
